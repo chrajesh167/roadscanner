@@ -10,6 +10,7 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
@@ -172,9 +173,9 @@ class CredentialRepositoryAdapterTest {
                 tx.executeWithoutResult(status -> {
                     Credential c = adapter.findByUserId(userId).orElseThrow();
                     bothRead.countDown();
-                    awaitUninterruptibly(bothRead);
+                    awaitUninterruptibly(bothRead);  // wait for the other thread to also read
                     c.suspend(NOW.plusSeconds(60));
-                    adapter.save(c);
+                    adapter.save(c);  // commits when this callback returns
                 });
                 firstWriteCommitted.countDown();
             });
@@ -183,9 +184,9 @@ class CredentialRepositoryAdapterTest {
                 Credential c = adapter.findByUserId(userId).orElseThrow();
                 bothRead.countDown();
                 awaitUninterruptibly(bothRead);
-                awaitUninterruptibly(firstWriteCommitted);
+                awaitUninterruptibly(firstWriteCommitted);  // wait until the first thread has definitely committed
                 c.suspend(NOW.plusSeconds(90));
-                adapter.save(c);
+                adapter.save(c);   // should fail — its read is now stale
             }));
 
             firstWriter.get(10, TimeUnit.SECONDS);
