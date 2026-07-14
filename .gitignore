@@ -67,3 +67,6 @@ coverage/
 ### Misc ###
 *.tmp
 *.bak
+
+### Claude Code (local/personal, not shared config) ###
+.claude/settings.local.json
