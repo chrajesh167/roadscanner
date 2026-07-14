@@ -1,0 +1,8 @@
+# Test-profile-only settings for properties that legitimately differ per environment and have
+# no sensible hardcoded default in application.yml (see config.CorsConfig). Datasource and Redis
+# connection details are NOT set here — TestcontainersConfiguration supplies them via
+# @ServiceConnection.
+
+roadscanner:
+  cors:
+    allowed-origins: http://localhost:5173

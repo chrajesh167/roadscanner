@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!--
+        docs/services/auth-service/logging-observability.md: every log line must carry the
+        correlation id (set by CorrelationIdFilter) so a single request is traceable end-to-end.
+        Never log raw credentials or tokens — nothing in this pattern or in application code
+        should ever interpolate one; see exception-strategy.md / security-design.md for the
+        absolute rule this pattern supports but does not enforce by itself.
+    -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [correlationId=%X{correlationId:-none}] %logger{36} - %msg%n"/>
+
+    <!--
+        Local: human-readable console output. Dev/prod: JSON, so Loki/Grafana can index fields
+        (correlationId, level, logger) instead of parsing free text — per
+        docs/architecture/high-level-design.md §9.
+    -->
+    <springProfile name="local">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!local">
+        <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+    </springProfile>
+</configuration>
