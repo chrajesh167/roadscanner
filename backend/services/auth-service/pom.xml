@@ -45,6 +45,18 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Security: filter chain + BCrypt (spring-security-crypto), and the resource-server
+             starter for Nimbus JWT (RS256 signing in adapter.out.security, decoding in the
+             authentication filter) — see docs/services/auth-service/security-design.md -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
         <!-- Persistence -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -118,6 +130,15 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- TestRestTemplate picks this up automatically. The JDK's simple request factory
+             cannot re-send a streamed request after an auth-related connection reset, which
+             breaks any end-to-end test that follows a 401 response on a kept-alive
+             connection — exactly what a security test suite does constantly. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

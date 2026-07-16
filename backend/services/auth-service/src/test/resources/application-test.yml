@@ -6,3 +6,7 @@
 roadscanner:
   cors:
     allowed-origins: http://localhost:5173
+  security:
+    jwt:
+      # Tests sign and verify within one process; a throwaway pair per test run is exactly right.
+      ephemeral-keys: true

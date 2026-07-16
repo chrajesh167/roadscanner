@@ -4,10 +4,25 @@ Authentication and authorization only. Does not own user profile data — see
 [`docs/services/auth-service/overview.md`](../../../docs/services/auth-service/overview.md) and
 the rest of that directory for the full design.
 
-**Status: foundation bootstrap only.** No registration, login, JWT, refresh tokens, password
-reset, repositories, entities, or controllers exist yet — see "What's Deliberately Not Here"
-below. This gets the project compiling, running, and observable, so the next session can build
-business logic directly on top of a working foundation instead of also fighting the scaffold.
+**Status: feature-complete for Phase 1.** All layers are implemented: domain, application
+use cases, persistence (Postgres/Flyway), security (Spring Security + RS256 JWT), Redis
+revocation cache, and the REST surface with OpenAPI documentation. See "API Surface" and
+"Remaining Integration Points" below.
+
+## API Surface
+
+All endpoints under `/api/v1/auth` (see `/swagger-ui.html` for the full contract):
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /register` | none | Create identity (default role `TRAVELER`), starts a session |
+| `POST /login` | none | Verify credentials, issue access + refresh tokens |
+| `POST /refresh` | refresh token in body | Rotate the refresh token, new access token; reuse of a rotated token revokes every session for the user |
+| `POST /logout` | refresh token in body | Revoke one session (idempotent) |
+| `POST /logout-all` | Bearer JWT | Revoke every session for the caller |
+| `POST /password-reset/request` | none | Always `202`, identical for unknown identifiers (enumeration protection) |
+| `POST /password-reset/confirm` | reset token in body | Single-use; changes password, revokes all sessions |
+| `POST /roles` | Bearer JWT, `ADMIN` | Internal role elevation (append-only role history) |
 
 ## Requirements
 
@@ -53,11 +68,20 @@ the top of that file for why.)
 ./mvnw package            # builds the executable jar
 ```
 
-`./mvnw test` boots the full Spring context against real, ephemeral Postgres and Redis
-containers (see `src/test/java/.../testsupport/TestcontainersConfiguration.java`) — this is the
-one test that exists today (`AuthServiceApplicationTests`), and it's a meaningful one: it proves
-the configuration, JPA, Flyway, Redis, actuator, and OpenAPI wiring genuinely works end-to-end,
-not just that the code compiles.
+`./mvnw test` runs the full suite: framework-free unit tests for the domain and application
+layers (these are the bulk, per `testing-strategy.md`), crypto adapter tests (BCrypt, RS256
+sign/verify/tamper), Testcontainers-backed integration tests for the persistence adapters and
+the Redis revocation cache, and `AuthServiceEndToEndTest` — full HTTP flows
+(register → login → refresh → logout) plus every scenario in `testing-strategy.md`'s
+"Security-Specific Scenarios" list (reuse detection, enumeration protection, lockout,
+tampered/expired tokens, single-use reset, RBAC).
+
+If Docker is provided by Colima rather than Docker Desktop, Testcontainers needs:
+
+```bash
+export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
+```
 
 ## Configuration Profiles
 
@@ -83,11 +107,26 @@ libraries are implemented, this `pom.xml` should be revisited to depend on them 
 alongside) the equivalent starters used here. This is the one deliberate deviation from the
 design docs in this bootstrap, made for build-correctness reasons.
 
-**No Spring Security dependency yet.** Adding `spring-boot-starter-security` without a
-configured filter chain triggers Spring Boot's default security (basic auth on everything,
-including `/actuator/health`), which would work against today's "foundation only, no
-authentication yet" scope. It's added alongside JWT implementation — see
-`docs/services/auth-service/implementation-roadmap.md` step 5.
+**JWT signing keys are configuration, never source.** Per `security-design.md`, the RS256 pair
+arrives as PEM via `roadscanner.security.jwt.private-key-pem` / `.public-key-pem` (sourced from
+the secrets manager in deployed environments — see `application-dev.yml`). The `local` and
+`test` profiles instead set `roadscanner.security.jwt.ephemeral-keys: true`, which generates a
+throwaway pair at startup with a loud warning; a deployed profile with neither configured
+fails startup deliberately. Generate a real pair with:
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl pkey -in private.pem -pubout -out public.pem
+```
+
+**Application layer is wired explicitly, not component-scanned.** Use-case classes carry no
+Spring stereotypes (only `@Transactional` boundaries); `config/UseCaseConfig` constructs every
+one, keeping the layer framework-light per `implementation-roadmap.md` step 3 and every
+dependency visible in one place.
+
+**Reuse detection revokes all of the user's sessions, not only the reused chain.** The
+repository ports expose lookup by user (not chain-walking), and over-revoking is the safe
+direction to err — a strict superset of `security-design.md`'s "entire token family".
 
 **No Lombok.** `.claude/CODING_STANDARDS.md` calls for constructor injection and meaningful
 naming; Java 21 records and plain constructors cover the DTO/config code in this bootstrap
@@ -97,22 +136,35 @@ trade-off worth it.
 **Hibernate `ddl-auto: validate`, never `update`.** Flyway is the sole source of schema truth in
 every environment, including local — see `docs/architecture/database-ownership.md`.
 
-## What's Deliberately Not Here
+## Remaining Integration Points
 
-Per today's scope: authentication, JWT issuance/validation, refresh token lifecycle,
-registration, login, password reset, RBAC enforcement, repositories, JPA entities, REST
-controllers, and Flyway migrations (there's nothing to migrate yet — see
-`src/main/resources/db/migration/README.md`). These are built in the sequence described in
-`docs/services/auth-service/implementation-roadmap.md`, on top of this foundation.
+Implemented but awaiting other platform components (tracked, not forgotten):
+
+- **Password-reset token delivery.** The reset request is fully persisted and confirmable, but
+  the raw token is currently discarded after hashing — dispatching it by email/SMS is
+  `notification-service`'s job (`docs/services/auth-service/responsibilities.md`), and that
+  service does not exist yet. Wire the delivery trigger when it does. The raw token is never
+  logged (redaction rule in `logging-observability.md`).
+- **Public-key distribution to other services** (e.g. a JWKS endpoint or config-based
+  distribution) — decided when `api-gateway` integration happens (roadmap step 11), together
+  with gateway routing and rate limiting.
+- **Finalized OpenAPI spec published to `docs/api/`** (roadmap step 10) — the live spec is
+  served at `/v3/api-docs` today.
+- **Custom Prometheus counters** from `logging-observability.md`'s metric table (login
+  failure rate, token-reuse-detected, lockout count). Standard HTTP/JVM metrics are exposed
+  now; reuse detection and lockouts are currently visible via tagged WARN/ERROR audit logs.
+- **`backend/shared-libs` adoption** — unchanged from the bootstrap decision above.
 
 ## Package Structure
 
 Hexagonal architecture — see
 [`docs/services/auth-service/package-structure.md`](../../../docs/services/auth-service/package-structure.md)
-for the full rationale. Each layer's package currently holds only a `package-info.java`
-explaining its intended contents until business logic is implemented, except:
+for the full rationale. Every layer is implemented, organized by feature within each layer:
 
-- `config/` — Jackson, CORS, OpenAPI, and Redis client wiring (generic, no business logic)
-- `domain/exception/AuthServiceException` — the root of the exception hierarchy; business-specific subtypes come with their use cases
-- `adapter/in/rest/exception/` — global exception handling (`GlobalExceptionHandler`, `ErrorResponse`)
-- `adapter/in/rest/filter/CorrelationIdFilter` — correlation-id propagation for logging/tracing
+- `domain/` — models, policies, ports, exceptions (framework-free; the only layer with zero Spring imports)
+- `application/usecase/{registration,login,token,passwordreset,role}` — inbound-port implementations plus the raw-token-resolving flow services
+- `adapter/out/persistence` — JPA entities/mappers/adapters for the four repository ports
+- `adapter/out/security` — BCrypt hasher, opaque-token generator, RS256 JWT signer
+- `adapter/out/cache` — Redis revocation cache (expendable, Postgres-authoritative)
+- `adapter/in/rest/{registration,login,token,passwordreset,role}` — controllers and DTOs, plus `exception/` (global mapping) and `filter/` (correlation id)
+- `config/` — Jackson, CORS, OpenAPI, Redis, security filter chain, JWT key material, properties, use-case wiring

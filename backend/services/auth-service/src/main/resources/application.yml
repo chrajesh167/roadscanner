@@ -46,6 +46,23 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+# Operational security tuning knobs (docs/services/auth-service/security-design.md). Values here
+# are the platform baseline, overridable per environment. JWT signing keys are deliberately NOT
+# here — they come from the secrets manager via env vars (dev/prod) or an explicit ephemeral
+# opt-in (local/test); see config/JwtConfig.
+roadscanner:
+  auth:
+    lockout-threshold: 5
+    lockout-duration: PT15M
+    password-min-length: 12
+    bcrypt-strength: 12
+    reset-token-ttl: PT30M
+  security:
+    jwt:
+      issuer: roadscanner-auth-service
+      access-token-ttl: PT15M # short-lived by design — docs/architecture/authentication-flow.md
+      refresh-token-ttl: P14D
+
 info:
   app:
     name: auth-service

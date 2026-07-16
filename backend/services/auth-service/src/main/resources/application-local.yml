@@ -26,6 +26,12 @@ management:
 roadscanner:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:5174
+  security:
+    jwt:
+      # Local development only: throwaway signing keys generated at startup. Tokens do not
+      # survive a restart, and nothing outside this process can rely on them — which is the
+      # point. Never set this in a deployed environment; see config/JwtConfig.
+      ephemeral-keys: true
 
 logging:
   level:

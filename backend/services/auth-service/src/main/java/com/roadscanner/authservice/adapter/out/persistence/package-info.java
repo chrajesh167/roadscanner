@@ -2,7 +2,8 @@
  * JPA/Postgres implementations of the persistence-related repository ports
  * ({@link com.roadscanner.authservice.domain.port.out.CredentialRepository},
  * {@link com.roadscanner.authservice.domain.port.out.RefreshTokenRepository},
- * {@link com.roadscanner.authservice.domain.port.out.PasswordResetRepository}).
+ * {@link com.roadscanner.authservice.domain.port.out.PasswordResetRepository},
+ * {@link com.roadscanner.authservice.domain.port.out.RoleAssignmentRepository}).
  *
  * Three kinds of classes live here, each aware of only one side of the domain/JPA boundary:
  * <ul>
@@ -13,7 +14,7 @@
  *       depend on the port interface only).</li>
  * </ul>
  *
- * {@code RoleAssignment} has no adapter here — see
- * {@code src/main/resources/db/migration/README.md} for why.
+ * The RoleAssignment adapter is append-only (no {@code @Version}, no in-place mutation) —
+ * see {@link com.roadscanner.authservice.adapter.out.persistence.RoleAssignmentRepositoryAdapter}.
  */
 package com.roadscanner.authservice.adapter.out.persistence;

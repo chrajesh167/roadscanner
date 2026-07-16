@@ -22,6 +22,12 @@ management:
 roadscanner:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  security:
+    jwt:
+      # PEM-encoded RS256 pair (PKCS#8 private / X.509 public), sourced from the secrets
+      # manager at deploy time — never a hardcoded fallback, per security-design.md.
+      private-key-pem: ${JWT_PRIVATE_KEY_PEM}
+      public-key-pem: ${JWT_PUBLIC_KEY_PEM}
 
 logging:
   level:
