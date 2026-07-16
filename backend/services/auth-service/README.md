@@ -76,12 +76,10 @@ the Redis revocation cache, and `AuthServiceEndToEndTest` — full HTTP flows
 "Security-Specific Scenarios" list (reuse detection, enumeration protection, lockout,
 tampered/expired tokens, single-use reset, RBAC).
 
-If Docker is provided by Colima rather than Docker Desktop, Testcontainers needs:
-
-```bash
-export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
-```
+Docker Desktop is the assumed container runtime — Testcontainers and `docker compose` both
+work with it out of the box, no extra environment configuration needed. (If you ever run
+Docker through an alternative runtime like Colima instead, Testcontainers will need
+`DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` pointed at that runtime's socket.)
 
 ## Configuration Profiles
 
