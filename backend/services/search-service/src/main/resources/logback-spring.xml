@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!--
+        docs/architecture/high-level-design.md §9: every log line must carry the correlation id
+        (set by CorrelationIdFilter for HTTP requests) so a request is traceable end-to-end.
+        Kafka-triggered log lines carry no HTTP correlation id — see adapter.in.event's listener
+        classes, which log the event's own identifiers (trip id, event type) instead.
+    -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [correlationId=%X{correlationId:-none}] %logger{36} - %msg%n"/>
+
+    <!--
+        Local: human-readable console output. Dev/prod: JSON, so Loki/Grafana can index fields
+        (correlationId, level, logger) instead of parsing free text — per
+        docs/architecture/high-level-design.md §9.
+    -->
+    <springProfile name="local">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!local">
+        <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+    </springProfile>
+</configuration>

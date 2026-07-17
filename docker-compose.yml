@@ -1,12 +1,18 @@
-# Local development dependencies. Scoped to what auth-service needs today (Postgres, Redis) —
-# not Kafka/nginx/observability, which no implemented service depends on yet. Grows as more
-# services are implemented; see docker/ for where each component's config lives.
+# Local development dependencies. Scoped to what implemented services need — auth-service
+# (Postgres, Redis) and search-service (its own Postgres, plus the shared Redis and the platform
+# Kafka broker). Grows as more services are implemented; see docker/ for where each component's
+# config lives.
 #
-# auth-service itself is intentionally NOT a service here: application-local.yml assumes
-# "localhost" for Postgres/Redis, i.e. the app runs natively (./mvnw spring-boot:run) against
-# these containers — the standard fast-iteration workflow. To run auth-service itself in a
-# container, build and run backend/services/auth-service/Dockerfile directly; see that
-# service's README for both options.
+# No application service itself runs here: each service's application-local.yml assumes
+# "localhost" for Postgres/Redis/Kafka, i.e. the app runs natively (./mvnw spring-boot:run)
+# against these containers — the standard fast-iteration workflow. To run a service itself in a
+# container, build and run its own Dockerfile directly; see that service's README for both
+# options.
+#
+# Per docs/architecture/database-ownership.md, every service owns exactly one database — hence
+# a separate Postgres container per service (auth on 5432, search on 5433), never a shared one.
+# Redis is shared across services for local convenience only; each service's cache keys are
+# prefixed distinctly (see each adapter.out.cache implementation), so there is no collision risk.
 
 services:
   postgres:
@@ -26,6 +32,23 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-search:
+    image: postgres:16-alpine
+    container_name: roadscanner-search-postgres
+    environment:
+      POSTGRES_DB: searchservice
+      POSTGRES_USER: searchservice
+      POSTGRES_PASSWORD: searchservice
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-search-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U searchservice -d searchservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: roadscanner-redis
@@ -37,5 +60,34 @@ services:
       timeout: 5s
       retries: 5
 
+  # Single-node KRaft broker (no Zookeeper) — sufficient for local development against the
+  # topics search-service consumes (docs/services/search-service/events-consumed.md). CLUSTER_ID
+  # is a random base64-encoded UUID (16 bytes) generated once for this compose file; it has no
+  # meaning beyond identifying this one local cluster, and any valid UUID works equally well.
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: roadscanner-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "0n0Osg_UReaba_yyF1F_Xg"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
 volumes:
   postgres-data:
+  postgres-search-data:
