@@ -63,6 +63,18 @@ A consumer that is down or lagging does not lose events — Kafka retains them a
 
 **Failure considerations:** none beyond the general model — reviews are not on any latency- or consistency-critical path.
 
+## Provider Integration Events
+
+| Event | Producer | Consumers | Purpose |
+|---|---|---|---|
+| `ProviderUnavailable` | `provider-integration-service` | none yet | A provider's health state transitioned into `UNAVAILABLE` |
+| `ProviderRecovered` | `provider-integration-service` | none yet | A provider's health state transitioned from `UNAVAILABLE` back to `HEALTHY` |
+| `SessionExpired` | `provider-integration-service` | none yet | A provider session was swept as expired without being refreshed |
+
+**No consumers exist yet** because `booking-service`, `search-service`, and `inventory-service` — the services expected to eventually consume `ProviderUnavailable`/`ProviderRecovered` to route around a degraded provider without polling its health endpoint — don't exist yet either. `analytics-service` would consume all three for reporting, the same role it plays for every other event in this catalog. See `docs/services/provider-integration-service/events-published.md`.
+
+**Failure considerations:** none beyond the general model — these are observability signals, never on a booking- or payment-critical path (`provider-integration-service` itself, not a consumer of these events, is what a caller talks to for the actual provider operation; these events are informational only).
+
 ## Explicitly Not Covered Here
 
 Authentication has no events — see `authentication-flow.md`; login/token issuance is synchronous request/response, not part of the event-driven surface.

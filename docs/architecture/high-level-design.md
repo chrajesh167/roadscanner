@@ -49,8 +49,11 @@ flowchart LR
 | `notification-service` | Email/SMS/push delivery | Notification templates/log | all |
 | `analytics-service` | Event ingestion, reporting/BI | Aggregated events | Admin |
 | `review-service` | Ratings & reviews | Reviews | Traveler |
+| `provider-integration-service` | Sole gateway to external transportation providers (FlixBus first) | Provider configs, sessions, audit trail, health | none directly — internal-only, called by `booking-service`/`search-service`/`inventory-service` |
 
-This matches `backend/services/` exactly — this document does not introduce or rename any service.
+This matches `backend/services/` exactly. `provider-integration-service` is this document's one
+addition since Phase 1 planning — see `docs/services/provider-integration-service/overview.md`
+for why it exists as its own service rather than being folded into an existing one.
 
 ## 4. Data Ownership
 
@@ -142,6 +145,7 @@ Trains, Flights, Hotels, and Cabs are explicitly out of scope for Phase 1, but t
 - A new vertical gets its own inventory-equivalent and booking-equivalent service(s). It is never bolted onto the existing bus-specific services, which would erode their bounded context.
 - Genuinely shared platform capabilities — `auth-service`, `user-service`, `payment-service`, `notification-service`, `review-service`, `api-gateway` — are reused as-is, because "a traveler" and "a payment" mean the same thing regardless of vertical.
 - `search-service` is expected to become a cross-vertical aggregator over time (one search spanning bus + train + flight results). That is a Phase 2+ evolution of its read model, not something Phase 1 needs to build or anticipate in code today.
+- New external transportation providers within the bus vertical (RedBus, AbhiBus, KSRTC, IntrCity, ...) plug into `provider-integration-service` without any change to that service's business logic — a new provider is a new isolated adapter package plus a configuration row, resolved at runtime by that service's provider registry. See `docs/services/provider-integration-service/overview.md` and its README's "How to Add a New Provider."
 
 ## 13. Explicitly Out of Scope for This Document
 

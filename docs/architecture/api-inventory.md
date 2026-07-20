@@ -80,6 +80,20 @@ Otherwise a pure event consumer, same reasoning as `notification-service`.
 | Submit Review | Rate/review a completed trip | customer-web |
 | Fetch Reviews | Read reviews for a trip/operator | customer-web (search result display), search-service (rating aggregation) |
 
+## `provider-integration-service`
+
+Unlike every category above, this one is **internal-only** — never reached through `api-gateway`,
+never called by a client. It's the platform's sole gateway to external transportation providers
+(FlixBus first); see `docs/services/provider-integration-service/overview.md`.
+
+| Category | Purpose | Consumed by |
+|---|---|---|
+| Provider Session Management | Authenticate against a provider, refresh a session | `booking-service`, `search-service`, `inventory-service` (service-to-service) |
+| Provider Trip Search | Search a specific provider for trips | `search-service` (service-to-service) |
+| Provider Seat Operations | Retrieve a seat map, block/release seats | `inventory-service` (service-to-service) |
+| Provider Booking | Confirm a booking, download a ticket | `booking-service` (service-to-service) |
+| Provider Metadata | Capability discovery, health | `booking-service`, `search-service`, `inventory-service` (service-to-service) |
+
 ## What's Deliberately Not Here
 
 Concrete paths, HTTP verbs, request/response payloads, versioning scheme, pagination conventions, and error-response formats. Those are OpenAPI-contract decisions made per service in `docs/api/`, once implementation begins for that service — this document exists so that decision has a clear, agreed-upon scope to start from.

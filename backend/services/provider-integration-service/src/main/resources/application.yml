@@ -1,0 +1,101 @@
+# Base configuration shared by every profile. Environment-specific values (datasource, Redis,
+# Kafka brokers, CORS origins, FlixBus credentials) are deliberately absent here — they belong in
+# application-<profile>.yml so a missing profile activation fails loudly instead of silently
+# falling back to a guessed default. See README.md "Configuration Profiles".
+
+spring:
+  application:
+    name: provider-integration-service
+
+  jackson:
+    default-property-inclusion: non_null
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate # Flyway is the sole source of schema truth — Hibernate never auto-migrates.
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+server:
+  port: 8083
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+info:
+  app:
+    name: provider-integration-service
+    description: RoadScanner Provider Integration Service — the platform's sole gateway to external transportation providers
+
+# Operational tuning knobs (docs/services/provider-integration-service/). Values here are the
+# platform baseline, overridable per environment.
+roadscanner:
+  provider:
+    health-check-interval: PT30S
+    session-expiry-sweep-interval: PT60S
+    capabilities-cache-ttl: PT1H
+    seat-map-cache-ttl: PT30S
+    kafka:
+      audit-topic: provider-integration-events
+    flixbus:
+      connect-timeout: PT2S
+      read-timeout: PT5S
+
+# Resilience4j — one instance ("flixbus") shared by every FlixBus*Client method. Only
+# ProviderUnavailableException counts toward the circuit breaker's failure rate / is retried
+# (see FlixBusExceptionTranslator's Javadoc) — a seat-unavailable or booking-declined response is
+# a valid business outcome, not a provider-health signal, and must never trip the breaker.
+resilience4j:
+  circuitbreaker:
+    instances:
+      flixbus:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: PT30S
+        permitted-number-of-calls-in-half-open-state: 3
+        record-exceptions:
+          - com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException
+  retry:
+    instances:
+      flixbus:
+        max-attempts: 3
+        wait-duration: PT0.5S
+        retry-exceptions:
+          - com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException
+  ratelimiter:
+    instances:
+      flixbus:
+        limit-for-period: 50
+        limit-refresh-period: PT1S
+        timeout-duration: PT0.5S
+  bulkhead:
+    instances:
+      flixbus:
+        max-concurrent-calls: 25
+        max-wait-duration: PT0.5S

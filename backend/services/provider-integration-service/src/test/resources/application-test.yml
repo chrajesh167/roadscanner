@@ -1,0 +1,12 @@
+# Test-profile-only settings for properties that legitimately differ per environment and have no
+# sensible hardcoded default in application.yml. Datasource, Redis, and Kafka connection details
+# are NOT set here — TestcontainersConfiguration supplies them via @ServiceConnection.
+
+roadscanner:
+  cors:
+    allowed-origins: http://localhost:5173
+  provider:
+    flixbus:
+      base-url: http://localhost:0 # overridden per-test via MockRestServiceServer or a dynamic property
+      client-id: test-client-id
+      client-secret: test-client-secret

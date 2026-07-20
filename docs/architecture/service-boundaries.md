@@ -60,6 +60,13 @@ A service exists because it has **one reason to change** that no other service s
 - **In scope:** ratings and reviews, tied to a verified completed booking.
 - **Out of scope:** does not own booking or trip data — it validates against `booking-service` at submission time rather than duplicating booking state.
 
+### `provider-integration-service`
+- **In scope:** provider authentication/session management, search/seat-map/seat-block/booking-confirmation/ticket-download pass-through, provider capability discovery, provider health monitoring, and every resilience concern (circuit breaking, retry, rate limiting, bulkheading) around external provider calls.
+- **Out of scope:** RoadScanner user identity (`auth-service`), booking state (`booking-service`), inventory/seat-hold state for RoadScanner's own operators (`inventory-service`), payments, notifications, the platform's own search index.
+- **Why:** provider integrations are volatile in a way nothing else in this platform is — each provider has its own API shape, auth flow, rate limits, and failure modes, and new providers are added on an ongoing basis. Concentrating that volatility in one service means every other service depends on one stable, canonical contract regardless of how many providers exist behind it.
+- **Why it's the only service allowed to call a provider directly:** the same reasoning `api-gateway`'s boundary uses in reverse — a provider-specific integration detail leaking into `booking-service` or `inventory-service` would make *them* a second place that detail has to be maintained, and would make swapping or adding a provider a change scattered across services instead of isolated to one adapter package. See `docs/services/provider-integration-service/boundaries.md`.
+- **Trade-off:** every provider operation now costs an extra service hop (`booking-service`/`inventory-service` → `provider-integration-service` → the provider) instead of a direct call. Accepted — the isolation is worth it for the same reason `payment-service` isolates payment gateway integration instead of letting `booking-service` call a payment gateway directly.
+
 ## Cross-Cutting Boundary Notes
 
 - **No service owns "the traveler" broadly** — identity (`auth-service`), profile (`user-service`), bookings (`booking-service`), payments (`payment-service`), and reviews (`review-service`) each own their own slice. There is deliberately no single "customer 360" service; that view is composed at the edge (`admin-console`, or `analytics-service` for reporting), not centralized as a write-owner.
@@ -68,3 +75,5 @@ A service exists because it has **one reason to change** that no other service s
 ## Phase 2+ Note
 
 New verticals (Trains, Flights, Hotels, Cabs) each get their own inventory-equivalent and booking-equivalent service, following the same boundary logic as above — never merged into the existing bus-specific services. Shared-concept services (`auth-service`, `user-service`, `payment-service`, `notification-service`, `review-service`, `api-gateway`) are reused unchanged. See `high-level-design.md` §12.
+
+`provider-integration-service` is bus-provider-specific in Phase 1 (its domain model — trips, seat maps, bus seat blocks — is bus-shaped). A future vertical integrating with its own external providers (e.g. a flight-aggregator API) would most likely warrant its own equivalent service rather than overloading this one's bus-shaped domain model, following the same "never merge into an existing vertical-specific service" logic applied above — a decision to make when that vertical is actually planned, not one this document anticipates in code today.
