@@ -1,0 +1,82 @@
+# Base configuration shared by every profile. Environment-specific values (datasource, Kafka
+# brokers, CORS origins, provider-integration-service base URL) are deliberately absent here —
+# they belong in application-<profile>.yml so a missing profile activation fails loudly instead
+# of silently falling back to a guessed default. See README.md "Configuration Profiles".
+
+spring:
+  application:
+    name: inventory-service
+
+  jackson:
+    default-property-inclusion: non_null
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate # Flyway is the sole source of schema truth — Hibernate never auto-migrates.
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # Deserializers are configured programmatically per topic in config.KafkaConfig (each topic's
+  # JSON target type is bound explicitly in code, not resolved via producer-sent type headers),
+  # so only the generic connection/group properties belong here.
+  kafka:
+    consumer:
+      group-id: inventory-service
+      auto-offset-reset: earliest
+
+server:
+  port: 8084
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+info:
+  app:
+    name: inventory-service
+    description: RoadScanner Inventory Service — the platform's catalog and metadata service
+
+# Operational tuning knobs (docs/services/inventory-service/). Values here are the platform
+# baseline, overridable per environment.
+roadscanner:
+  inventory:
+    kafka:
+      operator-trip-events-topic: trip-events
+      operator-route-events-topic: route-events
+      operator-operator-events-topic: operator-events
+      catalog-trip-events-topic: catalog-trip-events
+      catalog-operator-events-topic: catalog-operator-events
+      catalog-sync-events-topic: catalog-sync-events
+    sync:
+      provider-types: MOCK
+      window-days: 3
+      schedule-interval: PT300S
+    pagination:
+      default-limit: 10
+      max-limit: 50
+  provider-integration-service:
+    connect-timeout: PT2S
+    read-timeout: PT5S

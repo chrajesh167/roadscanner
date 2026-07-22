@@ -2,7 +2,19 @@
 
 Per `docs/architecture/event-catalog.md`'s delivery model, applied here without restatement of the general rules (see that document for the full explanation): all events below arrive **at-least-once** and are only ordered *within* a partition keyed by trip id — `search-service` must treat every handler below as idempotent and must not assume cross-trip ordering.
 
-## From `operator-service`
+> **Producer corrected by architecture review, 2026-07-22.** These events are now produced by
+> `inventory-service` (the merged, provider-agnostic catalog), not `operator-service` directly —
+> `operator-service` only ever knows about first-party trips, and would leave every
+> provider-sourced trip (FlixBus, RedBus, ...) permanently invisible to search. The **event names
+> and payload shape are unchanged**; this is a Kafka topic-source (config) change for this
+> service's consumer, not a code or schema change. See
+> `docs/services/inventory-service/events-published.md`. The rest of this repository's
+> `search-service` prose (`boundaries.md`, `domain-model.md`, etc.) still describes the original
+> `operator-service`-sourced design in places and is a documented follow-up cleanup, not a
+> functional inconsistency — every one of those references is accurate about *what the data is*,
+> only stale about which service currently publishes it.
+
+## From `inventory-service` (previously documented as `operator-service`)
 
 | Event | Purpose for `search-service` | Handling Notes |
 |---|---|---|
@@ -22,6 +34,6 @@ Per `docs/architecture/event-catalog.md`'s delivery model, applied here without 
 
 ## What `search-service` Deliberately Does Not Consume
 
-- **`SeatHeld` / `SeatReleased`** (from `inventory-service`) — per `event-catalog.md`, these are consumed only by `booking-service` and `analytics-service`. Live seat-count freshness is handled by a synchronous cached call instead — see `boundaries.md` for the full reasoning on why this data is intentionally *not* event-sourced.
+- **`SeatBlocked` / `SeatReleased`** (from `provider-integration-service`, renamed from `SeatHeld` and reattributed from `inventory-service` by architecture review, 2026-07-22) — per `event-catalog.md`, these are consumed only by `booking-service` and `analytics-service`. Live seat-count freshness is handled by a synchronous cached call to `inventory-service`'s availability facade instead — see `boundaries.md` for the full reasoning on why this data is intentionally *not* event-sourced.
 - **`BookingCreated` / `BookingConfirmed` / `BookingCancelled`** (from `booking-service`) — `search-service` has no relationship with the booking lifecycle at all (`boundaries.md`); a booking's effect on availability is already reflected the next time the cached `inventory-service` call runs.
 - **Payment events** — entirely outside this service's concern (`responsibilities.md`).

@@ -1,0 +1,33 @@
+# Local development profile — targets the docker-compose Postgres/Kafka (docker-compose.yml at
+# the repo root) and a natively-running provider-integration-service. Activate with
+# SPRING_PROFILES_ACTIVE=local.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5435/inventoryservice
+    username: inventoryservice
+    password: inventoryservice
+  kafka:
+    bootstrap-servers: localhost:9092
+  jpa:
+    show-sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+roadscanner:
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:5174
+  provider-integration-service:
+    base-url: http://localhost:8083
+
+logging:
+  level:
+    com.roadscanner.inventoryservice: DEBUG
+    org.hibernate.SQL: DEBUG

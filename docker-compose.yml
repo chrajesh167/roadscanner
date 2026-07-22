@@ -1,8 +1,9 @@
 # Local development dependencies. Scoped to what implemented services need — auth-service
 # (Postgres, Redis), search-service (its own Postgres, plus the shared Redis and the platform
-# Kafka broker), and provider-integration-service (its own Postgres, plus the shared Redis and
-# Kafka). Grows as more services are implemented; see docker/ for where each component's config
-# lives.
+# Kafka broker), provider-integration-service (its own Postgres, plus the shared Redis and
+# Kafka), and inventory-service (its own Postgres, plus the shared Kafka — no Redis, see that
+# service's README "Architectural Decisions"). Grows as more services are implemented; see
+# docker/ for where each component's config lives.
 #
 # No application service itself runs here: each service's application-local.yml assumes
 # "localhost" for Postgres/Redis/Kafka, i.e. the app runs natively (./mvnw spring-boot:run)
@@ -12,9 +13,9 @@
 #
 # Per docs/architecture/database-ownership.md, every service owns exactly one database — hence
 # a separate Postgres container per service (auth on 5432, search on 5433, provider-integration
-# on 5434), never a shared one. Redis is shared across services for local convenience only; each
-# service's cache keys are prefixed distinctly (see each adapter.out.cache implementation), so
-# there is no collision risk.
+# on 5434, inventory on 5435), never a shared one. Redis is shared across services for local
+# convenience only; each service's cache keys are prefixed distinctly (see each
+# adapter.out.cache implementation), so there is no collision risk.
 
 services:
   postgres:
@@ -68,6 +69,23 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-inventory:
+    image: postgres:16-alpine
+    container_name: roadscanner-inventory-postgres
+    environment:
+      POSTGRES_DB: inventoryservice
+      POSTGRES_USER: inventoryservice
+      POSTGRES_PASSWORD: inventoryservice
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventoryservice -d inventoryservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: roadscanner-redis
@@ -111,3 +129,4 @@ volumes:
   postgres-data:
   postgres-search-data:
   postgres-provider-integration-data:
+  postgres-inventory-data:

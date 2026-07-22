@@ -33,10 +33,22 @@ Not a domain API itself — it's the routing/auth-enforcement facade in front of
 
 ## `inventory-service`
 
+Corrected by architecture review, 2026-07-22 — `inventory-service` is a catalog/metadata service;
+live seat availability, holds, and reservations moved to `provider-integration-service`. See
+`docs/services/inventory-service/overview.md`.
+
 | Category | Purpose | Consumed by |
 |---|---|---|
-| Trip Availability Query | Live seat/trip availability for a route and date | search-service, customer-web (trip detail view) |
-| Seat Hold Management | Create/release a temporary seat hold | customer-web (via gateway), `booking-service` (validation, service-to-service) |
+| City / Station / Route Browsing | Catalog geography and route lookup | customer-web |
+| Trip Metadata Query | Catalog shape for a trip (route, schedule, operator, fare) | customer-web, search-service (event-driven, not this API — see below), `booking-service` |
+| Static Seat Layout Query | Seat numbering/deck/type — shape only, never status | customer-web, `booking-service` |
+| Trip Availability Query *(facade)* | Live seat-count, proxied live to `provider-integration-service` via the trip's provider mapping | search-service — **unchanged contract**, internal behavior corrected |
+| Provider Mapping Query | Provider type + native trip id for a catalog trip | `booking-service` (service-to-service) |
+| Sync Status Query | Catalog synchronization health/history | Internal/admin tooling |
+
+`search-service` reaches this service's catalog shape via Kafka (`inventory-service`'s own
+`TripPublished`/`TripUpdated`/`TripCancelled`, not a REST call) — listed here for completeness,
+not as an API category.
 
 ## `search-service`
 
@@ -88,11 +100,16 @@ never called by a client. It's the platform's sole gateway to external transport
 
 | Category | Purpose | Consumed by |
 |---|---|---|
-| Provider Session Management | Authenticate against a provider, refresh a session | `booking-service`, `search-service`, `inventory-service` (service-to-service) |
-| Provider Trip Search | Search a specific provider for trips | `search-service` (service-to-service) |
-| Provider Seat Operations | Retrieve a seat map, block/release seats | `inventory-service` (service-to-service) |
+| Provider Session Management | Authenticate against a provider, refresh a session | `booking-service`, `inventory-service` (service-to-service) |
+| Provider Trip Search | Search a specific provider for trips | `inventory-service` (service-to-service — catalog synchronization and the availability facade; **not** `search-service`, per boundary review point 4) |
+| Provider Seat Operations | Retrieve a live seat map (read), block/release seats (write) | `inventory-service` (seat-map read, for the facade), `booking-service` (block/release, service-to-service) |
 | Provider Booking | Confirm a booking, download a ticket | `booking-service` (service-to-service) |
-| Provider Metadata | Capability discovery, health | `booking-service`, `search-service`, `inventory-service` (service-to-service) |
+| Provider Metadata | Capability discovery, health | `booking-service`, `inventory-service` (service-to-service) |
+
+**`search-service` never calls this service, directly or indirectly through anything but
+`inventory-service`'s existing availability facade** — corrected and made explicit by architecture
+review, 2026-07-22, satisfying the requirement that search never becomes dependent on
+provider-specific APIs.
 
 ## What's Deliberately Not Here
 

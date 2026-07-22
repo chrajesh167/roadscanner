@@ -1,0 +1,26 @@
+# Deployed dev environment profile. Every environment-specific value comes from an env var with
+# no hardcoded fallback for secrets — a missing env var should fail startup loudly, not silently
+# default to something insecure.
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+roadscanner:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  provider-integration-service:
+    base-url: ${PROVIDER_INTEGRATION_SERVICE_BASE_URL}
+
+logging:
+  level:
+    com.roadscanner.inventoryservice: INFO

@@ -42,27 +42,31 @@ flowchart LR
 | `auth-service` | Authentication, JWT issuance/rotation, identity | Credentials, sessions | Traveler, Operator, Admin |
 | `user-service` | Traveler profile & account data | Traveler profiles, saved passengers | Traveler |
 | `operator-service` | Operator accounts, fleets, routes | Operator profile, fleet, route definitions | Operator, Admin |
-| `inventory-service` | Trip/seat inventory, availability, seat holds | Trips, seat maps, holds | Operator, Traveler (indirect) |
+| `inventory-service` | Catalog & metadata — cities, stations, routes, trips, seat layouts, provider mappings, sync | Cities, stations, routes, trip metadata, seat layouts, provider mappings, fare snapshots | Operator, Traveler (indirect) |
 | `search-service` | Trip search & ranking | Search index (derived read model) | Traveler |
-| `booking-service` | Booking lifecycle & state machine | Bookings, tickets | Traveler, Operator |
+| `booking-service` | Booking lifecycle & state machine, seat-selection orchestration | Bookings, tickets | Traveler, Operator |
 | `payment-service` | Payment processing, refunds, ledger | Payment transactions, refunds | Traveler, Operator |
 | `notification-service` | Email/SMS/push delivery | Notification templates/log | all |
 | `analytics-service` | Event ingestion, reporting/BI | Aggregated events | Admin |
 | `review-service` | Ratings & reviews | Reviews | Traveler |
-| `provider-integration-service` | Sole gateway to external transportation providers (FlixBus first) | Provider configs, sessions, audit trail, health | none directly — internal-only, called by `booking-service`/`search-service`/`inventory-service` |
+| `provider-integration-service` | Sole gateway to external transportation providers (FlixBus first); owns live seat availability, holds, and reservations | Provider configs, sessions, live seat state, audit trail, health | none directly — internal-only, called by `booking-service`/`search-service`/`inventory-service` |
 
 This matches `backend/services/` exactly. `provider-integration-service` is this document's one
 addition since Phase 1 planning — see `docs/services/provider-integration-service/overview.md`
 for why it exists as its own service rather than being folded into an existing one.
+`inventory-service`'s responsibility was corrected by architecture review, 2026-07-22 — it
+previously listed live availability and seat holds as its own; those now belong to
+`provider-integration-service`, and `inventory-service` is catalog/metadata only. See
+`docs/services/inventory-service/overview.md`.
 
 ## 4. Data Ownership
 
 Each service owns its own database; **no service reads another service's database directly.** Where a service needs data it doesn't own, it either:
 
 - calls the owning service's API synchronously, or
-- maintains its own derived read model, kept current via Kafka events (e.g., `search-service`'s index is a read model built from `inventory-service` and `operator-service` events).
+- maintains its own derived read model, kept current via Kafka events (e.g., `search-service`'s index is a read model built from `inventory-service`'s merged-catalog events — see `docs/services/inventory-service/overview.md` for why `inventory-service`, not `operator-service` directly, is the producer).
 
-This is a hard rule, not a guideline — it's what keeps 11 services independently deployable without a shared-schema migration ever blocking a release.
+This is a hard rule, not a guideline — it's what keeps 12 services independently deployable without a shared-schema migration ever blocking a release.
 
 ## 5. Communication Patterns
 
@@ -71,11 +75,16 @@ This is a hard rule, not a guideline — it's what keeps 11 services independent
 
   | Event | Producer | Consumers |
   |---|---|---|
-  | `TripPublished` / `TripUpdated` | `operator-service` | `inventory-service`, `search-service` |
-  | `SeatHeld` / `SeatReleased` | `inventory-service` | `booking-service` |
-  | `BookingCreated` / `BookingCancelled` | `booking-service` | `inventory-service`, `notification-service`, `analytics-service` |
+  | `TripPublished` / `TripUpdated` (first-party) | `operator-service` | `inventory-service` |
+  | `TripPublished` / `TripUpdated` (merged catalog) | `inventory-service` | `search-service` |
+  | `SeatBlocked` / `SeatReleased` | `provider-integration-service` | `booking-service`, `analytics-service` |
+  | `BookingCreated` / `BookingCancelled` | `booking-service` | `notification-service`, `analytics-service` (see `event-catalog.md` — the provider-side release on cancellation is now a synchronous call, not event-triggered) |
   | `PaymentCompleted` / `PaymentFailed` / `RefundIssued` | `payment-service` | `booking-service`, `notification-service`, `analytics-service` |
   | `ReviewSubmitted` | `review-service` | `search-service`, `analytics-service` |
+
+  See `event-catalog.md` for the full catalog, including `RouteUpdated`, `OperatorUpdated`,
+  `FareSnapshotUpdated`, `CatalogSyncCompleted`/`Failed` (all `inventory-service`), and
+  `ProviderUnavailable`/`ProviderRecovered`/`SessionExpired` (`provider-integration-service`).
 
 `api-gateway` never produces or consumes Kafka events — it is purely the synchronous front door.
 
@@ -87,27 +96,31 @@ Booking and payment are the one place where strong consistency matters more than
 sequenceDiagram
     participant T as Traveler
     participant B as booking-service
-    participant I as inventory-service
+    participant Inv as inventory-service
+    participant PI as provider-integration-service
     participant P as payment-service
 
-    T->>I: hold seat(s)
-    I-->>T: hold confirmed (TTL)
+    T->>B: select seat(s)
+    B->>Inv: resolve catalog metadata + ProviderMapping
+    B->>PI: block seat(s) with provider
+    PI-->>T: hold confirmed (TTL)
     T->>P: pay for booking
     P->>P: process payment
     P-->>B: PaymentCompleted (event)
+    B->>PI: confirm booking with provider
     B->>B: confirm booking
-    B-->>I: convert hold to reservation (event)
     B-->>T: booking confirmed
 ```
 
-If payment fails, `payment-service` emits `PaymentFailed`; `booking-service` never confirms the booking, and `inventory-service` releases the hold on TTL expiry or on the failure event — the seat is never lost to a booking that didn't happen.
+If payment fails, `payment-service` emits `PaymentFailed`; `booking-service` never confirms the booking, and calls `provider-integration-service` to release the reservation (or lets it expire on its own TTL) — the seat is never lost to a booking that didn't happen. See `docs/architecture/booking-flow.md` (corrected by architecture review, 2026-07-22) for the full step-by-step, including the new edge case where a provider declines confirmation after payment already succeeded.
 
 This is implemented as a **saga** across `booking-service` and `payment-service`, with each service using a **transactional outbox** (the DB write and its corresponding Kafka event commit atomically) so there is no window where a service's own state and its published event can disagree. This operationalizes the "Future: Saga Pattern, Outbox Pattern" line in `.claude/ARCHITECTURE_RULES.md` — adopted specifically for the booking↔payment path, not applied platform-wide, because most other flows tolerate eventual consistency.
 
 ## 7. Caching Strategy (Redis)
 
-- **Search/availability** — short-TTL cache in front of `search-service` and `inventory-service` reads, to absorb read-heavy load without hitting Postgres on every search.
-- **Seat holds** — TTL-based locks are a natural fit for Redis, coordinated with `inventory-service`'s own durable state as the source of truth.
+- **Search/availability** — short-TTL cache in front of `search-service` reads, and in front of `provider-integration-service`'s own live provider calls (`ProviderCache`), to absorb read-heavy load without hitting a provider or Postgres on every search.
+- **Seat holds** — owned by `provider-integration-service`, not `inventory-service` (corrected by architecture review, 2026-07-22 — see `docs/architecture/seat-locking-flow.md`). TTL-based locks are a natural fit for Redis wherever RoadScanner itself is the system of record for a hold; for a third-party provider, the provider's own system is authoritative and `provider-integration-service` relays rather than locks — see `seat-locking-flow.md` for the distinction.
+- **Provider sessions/tokens** — short-TTL cache in `provider-integration-service`, source of truth in its own Postgres.
 - **Sessions / rate limiting** — at `api-gateway`.
 
 Redis is always a derived, expendable copy. If it's flushed, the platform degrades in latency, not correctness — the database remains the source of truth everywhere.

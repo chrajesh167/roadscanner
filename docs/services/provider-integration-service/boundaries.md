@@ -49,3 +49,24 @@ data or need to execute a provider-side operation as part of their own workflow.
 expected to hold this service's session token themselves for long — the natural pattern is
 authenticate → do the provider operation(s) the current user request needs → let the session
 expire or be swept, rather than one long-lived session shared across many unrelated requests.
+
+`inventory-service` is specifically the caller for two purposes (confirmed by architecture review,
+2026-07-22, of `docs/services/inventory-service/`): resolving live availability for its
+`search-service`-facing facade, and periodic catalog synchronization (searching this service to
+discover/reconcile provider trips into `inventory-service`'s own `ProviderMapping`). **`search-service`
+never calls this service, in any capacity, direct or indirect beyond that facade** — it remains
+provider-agnostic by construction, satisfying the platform's requirement that search never depend
+on a provider-specific API.
+
+## Known Gap: No Post-Confirmation Cancellation Capability
+
+Identified by the same review: this service's inbound ports (`AuthenticateProvider`,
+`RefreshSession`, `SearchTrips`, `GetSeatMap`, `BlockSeat`, `ReleaseSeat`, `ConfirmBooking`,
+`DownloadTicket`, `GetProviderCapabilities`, `CheckProviderHealth`) have no operation for reversing
+an *already-confirmed* booking with a provider — `ReleaseSeat` only covers a still-`BLOCKED`
+reservation. `docs/architecture/booking-flow.md` steps 6–7 (post-confirmation cancellation, both
+traveler- and operator-initiated) depend on a capability that doesn't exist yet here. This needs a
+deliberate decision — a new `CancelBooking` port (mirroring `ConfirmBooking`'s shape) or an
+accepted policy that post-confirmation cancellations are refund-only with no provider-side
+reversal — before that part of the booking flow can be implemented. Not resolved in this pass; a
+prerequisite for `booking-service` implementation, not for `inventory-service`'s.

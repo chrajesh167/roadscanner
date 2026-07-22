@@ -9,6 +9,17 @@ precedent, mirrored here as `ProviderAuditMessage`).
 | `ProviderUnavailable` | A provider's health state transitions into `UNAVAILABLE` from anything else | Signals downstream services to degrade gracefully for that provider |
 | `ProviderRecovered` | A provider's health state transitions from `UNAVAILABLE` back to `HEALTHY` | Signals downstream services the provider is usable again |
 | `SessionExpired` | A scheduled sweep marks an `ACTIVE` session `EXPIRED` (token past expiry, never refreshed) | Observability into session churn; not currently required for correctness by any consumer |
+| `SeatBlocked` *(not yet implemented — gap identified by `docs/services/inventory-service/` architecture review, 2026-07-22)* | A `BlockSeat` call succeeds | Analytics/observability; assigned to this service (not `inventory-service`) because this is where the reservation actually happens |
+| `SeatReleased` *(not yet implemented — same review)* | A reservation ends without becoming a confirmed booking — explicit release or TTL expiry | Consumed by `booking-service`, `analytics-service` — see `docs/architecture/event-catalog.md` |
+
+`SeatBlocked`/`SeatReleased` are specified in `docs/architecture/event-catalog.md` (renamed from
+the pre-`provider-integration-service` `SeatHeld`/`SeatReleased` design that was previously,
+incorrectly, attributed to `inventory-service`) but are **not yet published by this service's
+current implementation** — `AuditPublisher`/`KafkaAuditPublisherAdapter` today carry only the three
+rows above. Adding them is a straightforward extension of the existing `AuditRecorder` pattern
+(`BlockSeatService`/`ReleaseSeatService` would call it, the same way `CheckProviderHealthService`
+already does) — flagged here as required before `booking-service` can rely on them, not designed
+further in this pass.
 
 ## Likely Future Consumers (Not Implemented Anywhere Yet)
 
