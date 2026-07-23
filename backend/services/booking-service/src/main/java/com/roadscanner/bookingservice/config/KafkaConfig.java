@@ -41,6 +41,17 @@ import java.util.Map;
  * All three consumer factories share one {@link DefaultErrorHandler}: bounded retries, then a
  * per-topic dead-letter topic — the same "one mapping layer" philosophy
  * {@code GlobalExceptionHandler} applies to HTTP, applied here to Kafka.
+ *
+ * <p><strong>{@code missingTopicsFatal(false)} on every listener container, explicitly.</strong>
+ * {@code catalog-trip-events} and {@code provider-integration-events} are real, already-shipped
+ * topics, but {@code payment-events} has no real producer yet — {@code payment-service} doesn't
+ * exist (docs/services/booking-service/boundaries.md's "Relationship to `payment-service`").
+ * Spring Kafka's own default for a missing topic at container-startup time depends on the
+ * broker's {@code auto.create.topics.enable} setting, which this service does not control and
+ * should not have to reason about to start up reliably. Setting this explicitly means this
+ * service's own startup is never gated on any upstream topic's existence, regardless of how the
+ * broker is configured — found and fixed by final implementation audit, which flagged this as
+ * reasoned-but-unverified rather than deterministic.
  */
 @Configuration
 @EnableConfigurationProperties(BookingProperties.class)
@@ -70,6 +81,7 @@ public class KafkaConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(catalogTripEventConsumerFactory);
         factory.setCommonErrorHandler(kafkaErrorHandler);
+        allowMissingTopicsAtStartup(factory);
         return factory;
     }
 
@@ -88,6 +100,7 @@ public class KafkaConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(providerAuditEventConsumerFactory);
         factory.setCommonErrorHandler(kafkaErrorHandler);
+        allowMissingTopicsAtStartup(factory);
         return factory;
     }
 
@@ -106,6 +119,7 @@ public class KafkaConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(paymentEventConsumerFactory);
         factory.setCommonErrorHandler(kafkaErrorHandler);
+        allowMissingTopicsAtStartup(factory);
         return factory;
     }
 
@@ -135,5 +149,11 @@ public class KafkaConfig {
         JsonDeserializer<T> jsonDeserializer = new JsonDeserializer<>(targetType, objectMapper, false);
         jsonDeserializer.addTrustedPackages(targetType.getPackageName());
         return new ErrorHandlingDeserializer<>(jsonDeserializer);
+    }
+
+    /** See the class Javadoc's "{@code missingTopicsFatal(false)} on every listener container,
+     * explicitly" note. */
+    private void allowMissingTopicsAtStartup(ConcurrentKafkaListenerContainerFactory<?, ?> factory) {
+        factory.getContainerProperties().setMissingTopicsFatal(false);
     }
 }

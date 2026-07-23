@@ -15,6 +15,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
@@ -120,6 +121,18 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleTripNotBookable(TripNotBookableException ex, HttpServletRequest request) {
         log.info("Trip not bookable on {}: {}", request.getRequestURI(), ex.tripId());
         return problem(HttpStatus.CONFLICT, "This trip cannot currently be booked", CONFLICT_TYPE, request);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        // Primarily the uq_bookings_provider_block_reference constraint (V1__create_booking_tables.sql)
+        // — two concurrent Create Booking calls against the same SeatHold both pass the
+        // application-level check before either persists; the database is the actual arbiter of
+        // "at most one booking per hold" (docs/architecture/booking-flow.md's idempotency
+        // requirement). The losing request gets a clean 409 instead of a raw 500 — found and
+        // fixed by final implementation audit.
+        log.info("Data integrity violation on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        return problem(HttpStatus.CONFLICT, "This request conflicts with an existing record", CONFLICT_TYPE, request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)

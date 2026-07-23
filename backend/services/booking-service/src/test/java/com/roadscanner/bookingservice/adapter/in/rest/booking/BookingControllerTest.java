@@ -95,6 +95,23 @@ class BookingControllerTest {
     }
 
     @Test
+    void createReturns409WhenTheHoldWasAlreadyConsumedByAConcurrentRequest() throws Exception {
+        // uq_bookings_provider_block_reference (V1__create_booking_tables.sql) is the actual
+        // arbiter when two Create Booking calls race the same SeatHold — the loser must see a
+        // clean 409, not a raw 500. Found and fixed by final implementation audit.
+        when(createBooking.create(any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException(
+                "duplicate key value violates unique constraint \"uq_bookings_provider_block_reference\""));
+
+        String body = """
+                {"seatHoldId":"%s","passengers":[{"fullName":"Jane Doe","age":30,"gender":"F","seatNumber":"L1"}]}
+                """.formatted(UUID.randomUUID());
+
+        mockMvc.perform(post("/api/v1/bookings").with(traveler(UUID.randomUUID()))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void getReturnsTheBooking() throws Exception {
         UUID travelerId = UUID.randomUUID();
         Booking booking = sampleBooking(travelerId);

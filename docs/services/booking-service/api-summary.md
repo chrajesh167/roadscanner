@@ -15,7 +15,7 @@ Auth" for the authorization rules layered on top of authentication.
 
 | Operation | Conceptual Endpoint | Purpose | Requires |
 |---|---|---|---|
-| Get Seat Selection View | `GET /api/v1/inventory/trips/{tripId}/seats` *(served by `booking-service`, not `inventory-service`, despite the path prefix matching that service's resource — an implementation/routing decision, not fixed here)* | Composed static layout + live status | `TRAVELER` |
+| Get Seat Selection View | `GET /api/v1/bookings/trips/{tripId}/seats` *(routing decision resolved during implementation — see the note below)* | Composed static layout + live status | `TRAVELER` — enforced in the controller itself, not merely by convention |
 | Hold Seats | `POST /api/v1/bookings/holds` | Place a temporary hold on selected seat(s) for a trip | `TRAVELER` |
 | Release Hold | `DELETE /api/v1/bookings/holds/{holdReference}` | Voluntarily abandon a hold before booking | `TRAVELER`, must own the hold |
 | Create Booking | `POST /api/v1/bookings` | Create a `PENDING_PAYMENT` booking against a held reference, with passenger details | `TRAVELER`, must own the hold |
@@ -23,17 +23,24 @@ Auth" for the authorization rules layered on top of authentication.
 | List Booking History | `GET /api/v1/bookings` | Every booking for the requesting traveler, all statuses | `TRAVELER` |
 | List Trip Bookings | `GET /api/v1/bookings?tripId=` | Every booking against a trip the requesting operator owns | `OPERATOR`, ownership check depends on `operator-service` (see `boundaries.md`) |
 | Cancel Booking | `POST /api/v1/bookings/{bookingId}/cancel` | Cancel a booking, per `use-cases.md`'s "Cancel Booking" | `TRAVELER` (own), `ADMIN`/`SUPPORT` |
-| Get Ticket | `GET /api/v1/bookings/{bookingId}/ticket` | Download the confirmed e-ticket | `TRAVELER` (own), `CONFIRMED`/`COMPLETED` only |
+| Get Ticket | `GET /api/v1/bookings/{bookingId}/ticket` | Download the confirmed e-ticket | `TRAVELER` (own) or `ADMIN`/`SUPPORT` (any booking), `CONFIRMED`/`COMPLETED` only |
 
-**Note on the seat-selection path prefix:** it is listed under `/api/v1/inventory/...` above
-because that is the resource the traveler conceptually views (a trip's seats), matching how a
-client would naturally navigate from `inventory-service`'s own trip-detail response. Whether this
-is actually routed to `booking-service` at the `api-gateway` level under that path, or exposed
-under `/api/v1/bookings/trips/{tripId}/seats` instead, is a routing decision left to
-implementation — flagged explicitly so it isn't mistaken for an accidental collision with
-`inventory-service`'s own `GET /api/v1/inventory/trips/{tripId}/seat-layout`
-(`docs/services/inventory-service/api-summary.md`), which remains that service's own, unchanged,
-static-shape-only endpoint.
+**`ADMIN`/`SUPPORT` on Get Ticket, reconciled by final implementation audit:** the row above
+originally listed `TRAVELER` (own) only. The shipped implementation additionally allows
+`ADMIN`/`SUPPORT`, matching this same document's own general "Booking ↔ Auth" principle
+(`boundaries.md`): *"`ADMIN`/`SUPPORT` — may view any booking, unrestricted, backing FR-8.3's
+support-lookup journey... support resolves issues by triggering the same operations a traveler
+could trigger."* A ticket is read-only booking data a support agent resolving FR-8.3's "traveler's
+booking, payment, and notification history" case needs to see. This document is updated to match
+the (better-justified) implementation rather than the other way around.
+
+**Note on the seat-selection path — resolved during implementation, not left open.** The route is
+`GET /api/v1/bookings/trips/{tripId}/seats`, deliberately *not* `/api/v1/inventory/trips/{tripId}/seats`
+— avoiding any collision, even a cosmetic one, with `inventory-service`'s own, unchanged,
+static-shape-only `GET /api/v1/inventory/trips/{tripId}/seat-layout`
+(`docs/services/inventory-service/api-summary.md`). The `api-gateway` routing-table entry for this
+path is still an implementation decision (`api-gateway` doesn't exist yet), but the path itself is
+fixed and enforced (`TRAVELER`-only) in `adapter.in.rest.hold.SeatSelectionController`.
 
 ## Internal (Service-to-Service, No Gateway)
 
