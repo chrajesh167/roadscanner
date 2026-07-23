@@ -1,5 +1,18 @@
 # Booking Service — Overview
 
+> **Reviewed, 2026-07-23 — final pass before implementation.** Confirmed `booking-service` is the
+> sole orchestrator of Seat Hold, Booking creation, and Provider Confirmation, with the client's
+> direct call to `payment-service` documented as the one, deliberate, non-orchestration exception
+> (`boundaries.md`'s "Single-Orchestrator Verification"). Confirmed and justified `Hold Seats`
+> remaining a separate client-facing step, against FR-3.2's own wording
+> (`boundaries.md`'s "Why `Hold Seats` Is a Separate Client-Facing Step"). Added a recommendation
+> — not implemented, since it would mean redesigning `inventory-service`'s frozen contract — that
+> `bookable` should eventually fold in `ProviderMapping` presence
+> (`boundaries.md`'s "Recommendation... `inventory-service` Should Expose 'Bookable' as Its Own
+> Signal"). Added `booking-state-machine.md` as the detailed, standalone state-transition
+> reference. No state, transition, contract, or existing-service boundary changed by this pass —
+> see "Implementation Readiness" below.
+
 ## Purpose
 
 `booking-service` is the platform's **orchestration layer for the booking lifecycle** — the
@@ -138,6 +151,41 @@ flagged again, in more detail, at its point of relevance:
 None of these required changing `inventory-service` or `provider-integration-service`'s existing,
 frozen contracts — every resolution stays entirely inside `booking-service`'s own design.
 
+## Implementation Readiness
+
+**Yes — this documentation set is implementation-ready**, with the following carried-forward,
+explicitly non-blocking conditions:
+
+- **Two integration points have no real producer/service to build against yet**
+  (`payment-service`, `operator-service`) and one event has no real producer yet
+  (`SeatReleased`). Every consumer/client contract for all three is fully specified
+  (`events-consumed.md`, `boundaries.md`), so implementation can proceed against those contracts
+  now, with the adapters wired to real endpoints the moment each dependency exists — the same
+  "contract ready, no real producer yet" posture already proven out by
+  `provider-integration-service`'s FlixBus integration and `inventory-service`'s `operator-service`
+  consumption before either upstream fully existed.
+- **Post-confirmation cancellation is refund-only, with no provider-side reversal**, by explicit,
+  documented decision (`boundaries.md`'s "Known Gap: Post-Confirmation Cancellation"). This is a
+  real product limitation, not an implementation blocker — it is fully specified behavior
+  (transition to `CANCELLED`, request a refund, do not call `provider-integration-service`), just
+  not the complete capability a future `CancelBooking` port on `provider-integration-service`
+  would eventually provide.
+- **Only `PROVIDER_SYNCED` trips are bookable today**, by construction of `inventory-service`'s
+  existing `ProviderMapping` model, not a `booking-service` defect (`use-cases.md`'s "A Trip With
+  No `ProviderMapping` Cannot Be Held"). Fully specified as a validation rule; implementation can
+  proceed without waiting on a first-party live-booking mechanism that doesn't exist yet anywhere
+  on this platform.
+- **The `operator-service` cancellation-policy dependency has an explicitly open interim-behavior
+  question** (`boundaries.md`'s "Relationship to `operator-service`") — what `booking-service`
+  does when that call has nowhere to go. This is the one place implementation cannot proceed on
+  full autopilot; whoever implements `Cancel Booking` must pick an interim default (documented
+  inline as a code comment/ADR at that point) and revisit it once `operator-service` exists. Every
+  other use case in this specification has no such open question.
+
+Nothing else in this specification is blocked. Domain model, state machine, every REST and Kafka
+contract, every service relationship, and every failure mode are fully specified against the
+frozen `inventory-service` and `provider-integration-service` contracts as they exist today.
+
 ## Documents in This Directory
 
 | Document | Covers |
@@ -145,6 +193,7 @@ frozen contracts — every resolution stays entirely inside `booking-service`'s 
 | `responsibilities.md` | Explicit responsibilities, non-responsibilities |
 | `boundaries.md` | Every service relationship, the four flagged gaps in full, and their resolutions |
 | `domain-model.md` | `Booking`, `SeatHold`, `Passenger`, `Ticket`, the state machine, invariants |
+| `booking-state-machine.md` | The full state machine in detail — every transition, trigger, and Mermaid diagram |
 | `use-cases.md` | Every inbound-port use case, client-facing and internal |
 | `sequence-diagrams.md` | The full booking and cancellation flows, precisely, including the two-step hold/book split |
 | `data-ownership.md` | What's authoritative here vs. a captured-at-a-point-in-time copy |

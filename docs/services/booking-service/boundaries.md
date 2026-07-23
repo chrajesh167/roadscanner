@@ -47,6 +47,39 @@ a missing catalog fact here would mean placing a hold or creating a booking agai
 should refuse the request rather than risk an inconsistent state") explicitly forbids trading
 away for availability. `booking-service` fails the operation with a clear, retryable error instead.
 
+### Recommendation (Not Implemented Here): `inventory-service` Should Expose "Bookable" as Its Own Signal
+
+`inventory-service`'s `Trip.bookable` flag today means exactly one thing: *not cancelled*
+(`docs/services/inventory-service/domain-model.md`: *"a bookable flag — false on `TripCancelled`,
+terminal"*). It says nothing about whether the trip has a `ProviderMapping` at all. A first-party
+trip with no provider equivalent reads as `bookable = true` right up until the moment
+`booking-service` tries to hold a seat for it and fails — because a live hold requires a
+`providerType` + `providerTripId` that simply doesn't exist for that trip (`overview.md`'s
+ambiguity #2, `use-cases.md`'s "A Trip With No `ProviderMapping` Cannot Be Held"). **This means
+`bookable = true` is currently a necessary but not sufficient condition for "can actually be
+booked end-to-end"** — a caller has to separately check for `ProviderMapping` presence to know
+the whole truth, which is exactly the kind of two-signals-for-one-question situation that invites
+a caller (a future `booking-service` implementer, or `customer-web` if it ever reads this flag
+directly) to get it wrong by trusting the flag alone.
+
+**The honest fix would be for `inventory-service` to fold "has a usable `ProviderMapping`" into
+what `bookable` means** — i.e., `bookable` becomes "not cancelled **and** has a live-booking
+path," computed by `inventory-service` itself rather than inferred by every caller separately.
+This is a real improvement worth making, and this review surfaces it explicitly because
+`booking-service`'s own correctness depends on getting this check right today.
+
+**Not implemented in this pass, on purpose** — this review's instructions are to document
+`booking-service`, not to redesign `inventory-service`'s already-frozen domain model or change its
+REST contract (`GET /trips/{tripId}` would need a field added or its `bookable` field's meaning
+changed — either way, a contract change to a service these instructions explicitly forbid
+redesigning). `booking-service`'s current design does not depend on this improvement happening —
+it independently checks for `ProviderMapping` presence itself (`use-cases.md`'s "Hold Seats"),
+which is correct today and remains correct even if `inventory-service` later adds a richer signal
+(at that point, `booking-service`'s explicit check becomes redundant but harmless, and can be
+simplified in a later revision of this document). **Recommended as a follow-up to
+`inventory-service`'s own architecture, the next time that service's contract is revisited** — not
+a blocker for `booking-service` implementation readiness.
+
 ## Relationship to `provider-integration-service`
 
 **Synchronous, both reads and writes, one direction.** `booking-service` is one of exactly two
@@ -149,6 +182,91 @@ real producer yet" posture `provider-integration-service` already carries for
 `booking-service` consumes the payment events (`events-consumed.md`) and calls a refund-request
 port (`use-cases.md`'s "Cancel Booking") whose adapter has no real target yet — this is a
 documented, not-yet-closed integration point (`api-summary.md`), not a design gap.
+
+**The one place the client legitimately bypasses `booking-service`, and why it doesn't break
+single-orchestrator ownership.** `docs/architecture/booking-flow.md` step 3 and
+`docs/architecture/api-inventory.md`'s `payment-service` row (*"Payment Initiation | Start payment
+for a pending booking | customer-web"*) both document the client calling `payment-service`
+**directly** to submit payment against a `PENDING_PAYMENT` booking — not through
+`booking-service`. This is a deliberate, frozen platform decision, not a gap this specification
+introduces: `payment-service` is its own client-facing service with its own boundary
+(`docs/architecture/service-boundaries.md`'s `payment-service` entry), and PCI-scope reasoning
+(NFR-12) argues *against* routing payment submission through an extra hop that would have no
+reason to see payment details anyway. **This is not client-side orchestration of the booking
+outcome** — the client is not deciding when to hold a seat, when to create a booking, or when to
+confirm it with the provider; it is only submitting payment to the one service that owns payment
+submission. `booking-service` never learns *how* payment happened and never drives the payment
+step itself — it only reacts to `PaymentCompleted`/`PaymentFailed`/`PaymentTimedOut`
+asynchronously (`sequence-diagrams.md` flows 4–5). Seat Hold, Booking creation, and Provider
+Confirmation remain exclusively `booking-service`-orchestrated with no exception — see the
+verification in "Single-Orchestrator Verification" below.
+
+## Single-Orchestrator Verification
+
+Reviewed explicitly, against every client-facing interaction this specification defines
+(`sequence-diagrams.md`, `use-cases.md`): **the client never calls `inventory-service` or
+`provider-integration-service` directly, at any point, in any flow.** Every sequence diagram in
+this directory routes every such call through `booking-service` (`T->>BS`, never `T->>IS` or
+`T->>PIS`). Concretely:
+
+| Step | Who the client calls | Who actually talks to `inventory-service` / `provider-integration-service` |
+|---|---|---|
+| View seats | `booking-service` | `booking-service` (both) |
+| Hold seat(s) | `booking-service` | `booking-service` (both, re-validation + `BlockSeat`) |
+| Create booking | `booking-service` | Neither — local `SeatHold` check only (see "Known Gap: No Read-Only Reservation-Status Check") |
+| Submit payment | `payment-service` (see above — a documented, deliberate exception, not a gap) | Neither |
+| Provider confirmation | *(no client call — driven entirely by `PaymentCompleted`)* | `booking-service` |
+| Cancel | `booking-service` | `booking-service` (`ReleaseSeat`, when applicable) |
+
+`inventory-service` and `provider-integration-service` remain unreachable from `customer-web` in
+this specification's design — consistent with `provider-integration-service` being internal-only
+by its own `overview.md`, and with `inventory-service`'s client-facing surface being limited to
+read-only catalog browsing (`docs/services/inventory-service/api-summary.md`), never seat
+selection or holds. **Confirmed: `booking-service` is the sole orchestrator of Seat Hold, Booking
+creation, and Provider Confirmation. The one client-service interaction outside `booking-service`
+(payment submission) is a documented exception at the platform level, not an instance of the
+client orchestrating the booking outcome.**
+
+## Why `Hold Seats` Is a Separate Client-Facing Step, Not Folded Into `Create Booking`
+
+Worth distinguishing explicitly from the previous section: `Hold Seats` being a *separate
+client-facing REST endpoint* from `Create Booking` is a different question from *who orchestrates
+it*. `booking-service` orchestrates both — the client never reaches `inventory-service` or
+`provider-integration-service` to place a hold itself. The question here is narrower: should the
+client see two distinct operations (hold, then later book), or one atomic operation that holds and
+books in a single call?
+
+**Kept as two steps, deliberately, for one reason that isn't optional: FR-3.2's own wording.**
+*"The system places a temporary hold on selected seats **during checkout**"* — checkout is the
+span of time the traveler spends entering passenger details, which takes real, human-scale time
+(seconds to a couple of minutes), not the instant of a single API call. If `Hold Seats` and
+`Create Booking` were merged into one atomic operation, the seat would only become held at the
+*end* of that span — precisely when the traveler submits the form — which means two travelers
+could both be filling out passenger details for the same seat simultaneously, only for one to
+discover the conflict at submission. That is exactly the failure mode
+`docs/architecture/seat-locking-flow.md` exists to prevent (*"a slow hold increases the odds of
+losing the seat to a concurrent traveler,"* NFR-2), and exactly why FR-3.2 says "during checkout,"
+not "at the moment of booking." A separate, earlier `Hold Seats` call is the only way to place the
+hold *before* the traveler starts entering details rather than after.
+
+This is also why `SeatHold` exists as a distinct, short-lived aggregate from `Booking`
+(`domain-model.md`) rather than `Booking` simply gaining a `HOLDING` pre-status — FR-3.4's
+abandonment case ("a traveler holds seats, looks at them, and never proceeds") needs to be
+representable without ever creating a `Booking` row nobody would recognize as a real booking
+attempt.
+
+**What this is not:** it is not client-side orchestration of multiple backend services (see
+"Single-Orchestrator Verification" above — both calls still terminate entirely at
+`booking-service`), and it is not two independent API surfaces that could be called out of order
+to bypass validation — `Create Booking` re-validates the hold's `expiresAt` and ownership on every
+call, so a client cannot skip or race the two steps into an inconsistent outcome.
+
+**Recommendation, not a change:** this specification recommends keeping `Hold Seats` as a
+separate client-facing operation, as justified above. Collapsing it into `Create Booking` would
+require weakening FR-3.2 itself (redefining "during checkout" to mean "at submission"), which is
+outside this document's authority to decide — the same posture `domain-model.md`'s "Reconciling
+the Requested State Vocabulary" takes toward changes that belong to a requirements document, not
+an implementation specification.
 
 ## Relationship to `operator-service` (Not Yet Built)
 
