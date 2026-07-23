@@ -1,0 +1,34 @@
+# Deployed dev environment profile. Every environment-specific value comes from an env var with
+# no hardcoded fallback for secrets — a missing env var should fail startup loudly, not silently
+# default to something insecure.
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+roadscanner:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  security:
+    jwt:
+      # The real public key matching auth-service's RS256 signing key — sourced from a secrets
+      # manager, never checked into configuration (docs/services/auth-service/security-design.md).
+      public-key-pem: ${AUTH_SERVICE_JWT_PUBLIC_KEY_PEM}
+  booking:
+    inventory-service:
+      base-url: ${INVENTORY_SERVICE_BASE_URL}
+    provider-integration-service:
+      base-url: ${PROVIDER_INTEGRATION_SERVICE_BASE_URL}
+
+logging:
+  level:
+    com.roadscanner.bookingservice: INFO
