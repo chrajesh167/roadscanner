@@ -21,10 +21,11 @@ const HIGHLIGHTS = [
   'Your bookings, tickets and cancellations live in one history.',
 ];
 
+// Kept in step with auth-service's PasswordComplexityPolicy — see the schema for why there is
+// no uppercase rule here.
 const RULES = [
-  { label: 'At least 8 characters', test: (value: string) => value.length >= 8 },
-  { label: 'A lowercase letter', test: (value: string) => /[a-z]/.test(value) },
-  { label: 'An uppercase letter', test: (value: string) => /[A-Z]/.test(value) },
+  { label: 'At least 12 characters', test: (value: string) => value.length >= 12 },
+  { label: 'A letter', test: (value: string) => /[a-zA-Z]/.test(value) },
   { label: 'A number', test: (value: string) => /[0-9]/.test(value) },
 ];
 

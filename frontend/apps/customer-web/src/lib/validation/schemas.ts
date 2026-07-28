@@ -22,14 +22,15 @@ export type LoginValues = z.infer<typeof loginSchema>;
 export const registerSchema = z
   .object({
     identifier: identifierSchema,
-    // auth-service enforces its own policy; this is the friendlier front line.
+    // Mirrors auth-service's PasswordComplexityPolicy exactly: at least 12 characters, and at
+    // least one letter and one digit. It deliberately does NOT require an uppercase letter —
+    // the backend doesn't, and demanding more than the server accepts only invents failures.
     password: z
       .string()
-      .min(8, 'Use at least 8 characters')
+      .min(12, 'Use at least 12 characters')
       .max(128, 'That is too long')
-      .regex(/[a-z]/, 'Include a lowercase letter')
-      .regex(/[A-Z]/, 'Include an uppercase letter')
-      .regex(/[0-9]/, 'Include a number'),
+      .regex(/[a-zA-Z]/, 'Include at least one letter')
+      .regex(/[0-9]/, 'Include at least one number'),
     confirmPassword: z.string(),
   })
   .refine((values) => values.password === values.confirmPassword, {

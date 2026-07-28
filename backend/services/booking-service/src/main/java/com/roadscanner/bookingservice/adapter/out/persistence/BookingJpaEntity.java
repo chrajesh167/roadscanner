@@ -10,6 +10,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -86,7 +88,11 @@ public class BookingJpaEntity {
     @Column(name = "ticket_format")
     private String ticketFormat;
 
+    // Bare @Lob makes Hibernate 6 expect a Postgres `oid` (large-object) column, but the migration
+    // declares `ticket_content BYTEA` — the mismatch fails schema validation at startup. VARBINARY
+    // maps to bytea, which is what a ticket payload should be: inline bytes, not a large object.
     @Lob
+    @JdbcTypeCode(SqlTypes.VARBINARY)
     @Column(name = "ticket_content")
     private byte[] ticketContent;
 
