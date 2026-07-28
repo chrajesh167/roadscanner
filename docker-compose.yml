@@ -2,9 +2,10 @@
 # (Postgres, Redis), search-service (its own Postgres, plus the shared Redis and the platform
 # Kafka broker), provider-integration-service (its own Postgres, plus the shared Redis and
 # Kafka), inventory-service (its own Postgres, plus the shared Kafka — no Redis, see that
-# service's README "Architectural Decisions"), and booking-service (its own Postgres, plus the
-# shared Kafka — no Redis either, see that service's README). Grows as more services are
-# implemented; see docker/ for where each component's config lives.
+# service's README "Architectural Decisions"), booking-service (its own Postgres, plus the
+# shared Kafka — no Redis either, see that service's README), and payment-service (its own
+# Postgres, plus the shared Kafka — no Redis). Grows as more services are implemented; see
+# docker/ for where each component's config lives.
 #
 # No application service itself runs here: each service's application-local.yml assumes
 # "localhost" for Postgres/Redis/Kafka, i.e. the app runs natively (./mvnw spring-boot:run)
@@ -14,7 +15,7 @@
 #
 # Per docs/architecture/database-ownership.md, every service owns exactly one database — hence
 # a separate Postgres container per service (auth on 5432, search on 5433, provider-integration
-# on 5434, inventory on 5435, booking on 5436), never a shared one. Redis is shared across
+# on 5434, inventory on 5435, booking on 5436, payment on 5437), never a shared one. Redis is shared across
 # services for local convenience only; each service's cache keys are prefixed distinctly (see
 # each adapter.out.cache implementation), so there is no collision risk.
 
@@ -104,6 +105,23 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-payment:
+    image: postgres:16-alpine
+    container_name: roadscanner-payment-postgres
+    environment:
+      POSTGRES_DB: paymentservice
+      POSTGRES_USER: paymentservice
+      POSTGRES_PASSWORD: paymentservice
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres-payment-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paymentservice -d paymentservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: roadscanner-redis
@@ -149,3 +167,4 @@ volumes:
   postgres-provider-integration-data:
   postgres-inventory-data:
   postgres-booking-data:
+  postgres-payment-data:

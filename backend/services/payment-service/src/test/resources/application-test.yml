@@ -1,0 +1,24 @@
+# Test profile — Testcontainers provides datasource + Kafka via @ServiceConnection; JWT uses an
+# ephemeral key pair so a matching test-only signer (TestJwtIssuer) mints tokens this same process
+# verifies. Base topic/gateway/payment-window values come from application.yml (profiles are additive).
+spring:
+  jpa:
+    show-sql: false
+
+roadscanner:
+  cors:
+    allowed-origins: http://localhost:5173
+  security:
+    jwt:
+      ephemeral-keys: true
+  payment:
+    gateways:
+      default-type: RAZORPAY
+      webhook-secrets:
+        RAZORPAY: test-razorpay-secret
+        STRIPE: test-stripe-secret
+        ADYEN: test-adyen-secret
+
+logging:
+  level:
+    com.roadscanner.paymentservice: INFO
