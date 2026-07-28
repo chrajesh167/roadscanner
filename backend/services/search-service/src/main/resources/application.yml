@@ -73,5 +73,9 @@ roadscanner:
       cache-ttl: PT15S # short-lived by design — docs/services/search-service/boundaries.md
       request-timeout: PT0.5S
     kafka:
-      trip-events-topic: trip-events
+      # inventory-service's OWN catalog events (TripPublished/Updated/Cancelled), which is what
+      # this service indexes per docs/architecture/api-inventory.md. `trip-events` is the
+      # operator-service -> inventory-service topic and carries the upstream feed, not the
+      # reconciled catalog — subscribing to it left the index empty.
+      trip-events-topic: catalog-trip-events
       review-events-topic: review-events

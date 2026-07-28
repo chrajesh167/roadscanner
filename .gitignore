@@ -71,3 +71,9 @@ coverage/
 
 ### Claude Code (local/personal, not shared config) ###
 .claude/settings.local.json
+
+### Next.js ###
+.next/
+next-env.d.ts
+.vercel/
+*.tsbuildinfo
