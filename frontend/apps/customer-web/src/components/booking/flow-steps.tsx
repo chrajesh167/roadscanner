@@ -25,7 +25,7 @@ export function FlowSteps({ current }: { current: FlowStep }) {
                   className={cn(
                     'grid size-6 shrink-0 place-items-center rounded-full border text-micro transition-colors duration-300',
                     done && 'border-accent bg-accent text-white',
-                    active && 'border-accent bg-accent-soft text-[#b9aaff]',
+                    active && 'border-accent bg-accent-soft text-accent-text',
                     !done && !active && 'border-line-strong text-content-muted',
                   )}
                 >

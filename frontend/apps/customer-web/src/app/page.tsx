@@ -49,13 +49,13 @@ export default function LandingPage() {
           </FadeIn>
 
           <FadeIn delay={0.08}>
-            <h1 className="max-w-3xl text-[2.75rem] font-semibold leading-[1.05] tracking-[-0.04em] sm:text-display">
+            <h1 className="max-w-3xl text-[2.5rem] font-semibold leading-[1.06] tracking-[-0.036em] sm:text-display">
               <span className="text-gradient">Travel, considered.</span>
             </h1>
           </FadeIn>
 
           <FadeIn delay={0.16}>
-            <p className="mt-6 max-w-xl text-[1.0625rem] leading-relaxed text-content-secondary">
+            <p className="mt-6 max-w-xl text-[1.125rem] leading-[1.6] text-content-secondary">
               Search every operator on your route, compare on what matters, and hold the seat you
               want — in a booking flow that respects your attention.
             </p>
@@ -74,11 +74,11 @@ export default function LandingPage() {
       </section>
 
       {/* ---- Pillars ---- */}
-      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
+      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-24">
         <Reveal>
-          <h2 className="max-w-2xl text-h2">
+          <h2 className="max-w-2xl text-h2 text-balance">
             Built like infrastructure.
-            <span className="text-content-muted"> Finished like a product.</span>
+            <span className="text-content-secondary"> Finished like a product.</span>
           </h2>
         </Reveal>
 
@@ -87,7 +87,7 @@ export default function LandingPage() {
             <Reveal key={pillar.title} delay={index * 0.07}>
               <Card variant="solid" padding="lg" className="h-full">
                 <div className="mb-5 grid size-11 place-items-center rounded-md border border-accent/20 bg-accent-soft">
-                  <pillar.icon className="size-5 text-[#b9aaff]" aria-hidden />
+                  <pillar.icon className="size-5 text-accent-text" aria-hidden />
                 </div>
                 <h3 className="text-h3">{pillar.title}</h3>
                 <p className="mt-2.5 text-body text-content-secondary">{pillar.body}</p>

@@ -34,13 +34,13 @@ export function AuthLayout({
         </FadeIn>
 
         <FadeIn delay={0.12} className="hidden lg:block">
-          <div className="rounded-xl glass p-9">
+          <div className="rounded-xl bg-surface border border-line p-9">
             <p className="text-micro uppercase text-content-muted">Why an account</p>
             <ul className="mt-6 flex flex-col gap-5">
               {highlights.map((highlight) => (
                 <li key={highlight} className="flex gap-3.5">
                   <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-accent-soft border border-accent/25">
-                    <Check className="size-3 text-[#b9aaff]" aria-hidden />
+                    <Check className="size-3 text-accent-text" aria-hidden />
                   </span>
                   <span className="text-body text-content-secondary">{highlight}</span>
                 </li>

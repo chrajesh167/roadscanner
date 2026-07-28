@@ -2,7 +2,9 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils/cn';
 
-const cardVariants = cva('rounded-lg transition-colors duration-200', {
+const cardVariants = cva(
+  'rounded-lg transition-[background-color,border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
+  {
   variants: {
     variant: {
       /** Default surface — the workhorse container. */
@@ -15,18 +17,21 @@ const cardVariants = cva('rounded-lg transition-colors duration-200', {
       ghost: 'border border-line',
     },
     interactive: {
-      true: 'cursor-pointer hover:border-line-strong hover:bg-elevated focus-within:border-accent/40',
+      // Lifts slightly and warms its border on hover — enough to read as clickable without the
+      // whole list jittering as the pointer crosses it.
+      true: 'cursor-pointer hover:border-accent/35 hover:bg-elevated hover:shadow-md focus-within:border-accent/50 hover:-translate-y-0.5',
       false: '',
     },
     padding: {
       none: '',
-      sm: 'p-4',
+      sm: 'p-4 sm:p-5',
       md: 'p-5 sm:p-6',
       lg: 'p-6 sm:p-8',
     },
   },
-  defaultVariants: { variant: 'solid', interactive: false, padding: 'md' },
-});
+    defaultVariants: { variant: 'solid', interactive: false, padding: 'md' },
+  },
+);
 
 export interface CardProps
   extends React.HTMLAttributes<HTMLDivElement>,

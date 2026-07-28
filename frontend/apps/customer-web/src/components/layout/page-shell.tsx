@@ -28,9 +28,9 @@ export function PageShell({
     width === 'narrow' ? 'max-w-xl' : width === 'wide' ? 'max-w-6xl' : 'max-w-4xl';
 
   return (
-    <div className={cn('mx-auto px-5 pb-20 pt-10 sm:px-8 sm:pt-14', maxWidth, className)}>
+    <div className={cn('mx-auto px-5 pb-24 pt-8 sm:px-8 sm:pt-12', maxWidth, className)}>
       {(title || backHref) && (
-        <FadeIn className="mb-8 flex flex-col gap-4">
+        <FadeIn className="mb-10 flex flex-col gap-5">
           {backHref && (
             <Link
               href={backHref}
@@ -42,8 +42,8 @@ export function PageShell({
           )}
           {title && (
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex flex-col gap-2">
-                <h1 className="text-h1">{title}</h1>
+              <div className="flex flex-col gap-2.5">
+                <h1 className="text-h1 text-balance">{title}</h1>
                 {description && (
                   <p className="max-w-2xl text-body text-content-secondary">{description}</p>
                 )}

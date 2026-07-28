@@ -21,10 +21,10 @@ const buttonVariants = cva(
         primary:
           'bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.14)_inset] hover:bg-accent-hover active:bg-accent-press hover:shadow-glow',
         secondary:
-          'bg-elevated text-content border border-line-strong hover:bg-overlay hover:border-white/20',
-        ghost: 'text-content-secondary hover:bg-white/[0.06] hover:text-content',
+          'bg-elevated text-content border border-line-strong hover:bg-overlay hover:border-white/24',
+        ghost: 'text-content-secondary hover:bg-white/[0.07] hover:text-content',
         outline:
-          'border border-line-strong text-content hover:bg-white/[0.04] hover:border-white/20',
+          'border border-line-strong text-content hover:bg-white/[0.05] hover:border-white/24',
         danger: 'bg-danger/15 text-danger border border-danger/30 hover:bg-danger/25',
         link: 'text-accent underline-offset-4 hover:underline p-0 h-auto',
       },
