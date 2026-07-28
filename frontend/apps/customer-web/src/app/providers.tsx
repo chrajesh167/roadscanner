@@ -36,7 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           closeButton
           toastOptions={{
             classNames: {
-              toast: 'glass !rounded-lg !text-content !border-line',
+              toast: 'panel !rounded-lg !text-content !border-line',
               description: '!text-content-secondary',
             },
           }}

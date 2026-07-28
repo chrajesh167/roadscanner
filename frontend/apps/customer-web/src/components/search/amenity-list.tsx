@@ -11,6 +11,7 @@ import {
   Wifi,
   type LucideIcon,
 } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 
 /**
  * Amenities arrive as free-text strings from the operator's catalogue, so matching is done on
@@ -33,14 +34,22 @@ function iconFor(amenity: string): LucideIcon {
   return ICONS.find(([pattern]) => pattern.test(amenity))?.[1] ?? Sparkles;
 }
 
-export function AmenityList({ amenities, max }: { amenities: string[]; max?: number }) {
+export function AmenityList({
+  amenities,
+  max,
+  className,
+}: {
+  amenities: string[];
+  max?: number;
+  className?: string;
+}) {
   if (amenities.length === 0) return null;
 
   const shown = max ? amenities.slice(0, max) : amenities;
   const remaining = amenities.length - shown.length;
 
   return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <ul className={cn('flex flex-wrap items-center gap-x-4 gap-y-2', className)}>
       {shown.map((amenity) => {
         const Icon = iconFor(amenity);
         return (

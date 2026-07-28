@@ -80,7 +80,7 @@ export function Tooltip({
           side={side}
           sideOffset={8}
           className={cn(
-            'pop-panel z-50 max-w-56 rounded-sm glass px-2.5 py-1.5',
+            'pop-panel z-50 max-w-56 rounded-sm panel px-2.5 py-1.5',
             'text-caption text-content shadow-md',
           )}
         >
@@ -105,7 +105,7 @@ export function Avatar({ name, className }: { name: string; className?: string }
     <AvatarPrimitive.Root
       className={cn(
         'grid size-9 shrink-0 place-items-center overflow-hidden rounded-full',
-        'bg-accent-soft border border-accent/25 text-caption font-semibold text-[#b9aaff]',
+        'bg-accent-soft border border-accent/25 text-caption font-semibold text-accent-text',
         className,
       )}
     >

@@ -1,27 +1,30 @@
 'use client';
 
 import * as React from 'react';
-import { Accessibility, Armchair } from 'lucide-react';
-import { Pressable } from '@/components/ui/motion';
+import { motion } from 'framer-motion';
+import { Accessibility, Check, CircleSlash, LifeBuoy } from 'lucide-react';
 import { Tooltip } from '@/components/ui/misc';
 import { formatMoney } from '@/lib/utils/format';
+import { usePrefersReducedMotion } from '@/lib/hooks/use-reduced-motion';
 import { cn } from '@/lib/utils/cn';
 import type { SeatViewResponse } from '@/lib/api/types';
 
 /**
- * Seat deck map.
+ * Seat deck map, drawn as a bus interior rather than an abstract grid.
  *
  * The backend returns a flat seat list carrying `deck` and an optional `position`; it does not
- * describe a grid. So seats are grouped by deck and ordered by `position` (falling back to a
- * natural sort of `seatNumber`), then flowed into a responsive grid with an aisle gap. That
- * renders any layout the catalogue produces without assuming a fixed column count.
+ * describe geometry. So seats are grouped by deck, ordered by `position` (falling back to a
+ * natural sort of `seatNumber`), then laid out 2 + aisle + 2 — the near-universal coach
+ * arrangement. The aisle is a real column, not a margin hack, so rows line up on every width.
  *
- * Only `AVAILABLE` seats are selectable — every other status (`BOOKED`, `BLOCKED`, `UNAVAILABLE`,
- * or `UNKNOWN` when the live overlay is missing) is rendered disabled rather than hidden, so the
- * bus still reads as a bus.
+ * Only `AVAILABLE` seats are selectable. Every other status renders as a visibly *inert* seat
+ * rather than disappearing, so the bus still reads as a bus and the user can see how full it is.
  */
 
 export const SELECTABLE_STATUS = 'AVAILABLE';
+
+const SEATS_PER_ROW = 4;
+const AISLE_AFTER = 2;
 
 function naturalCompare(a: SeatViewResponse, b: SeatViewResponse): number {
   if (a.position !== null && b.position !== null) return a.position - b.position;
@@ -37,7 +40,7 @@ function statusLabel(status: string): string {
     case 'BOOKED':
       return 'Already booked';
     case 'BLOCKED':
-      return 'Blocked by the operator';
+      return 'Held by the operator';
     case 'UNAVAILABLE':
       return 'Unavailable';
     default:
@@ -48,52 +51,115 @@ function statusLabel(status: string): string {
 function Seat({
   seat,
   selected,
-  disabled,
+  atLimit,
   onToggle,
 }: {
   seat: SeatViewResponse;
   selected: boolean;
-  disabled: boolean;
+  atLimit: boolean;
   onToggle: () => void;
 }) {
+  const reduced = usePrefersReducedMotion();
   const selectable = seat.status === SELECTABLE_STATUS;
   const blocked = !selectable;
+  const disabled = blocked || (atLimit && !selected);
 
   return (
     <Tooltip
+      side="top"
       content={
         <span className="flex flex-col gap-0.5">
-          <span className="font-medium text-content">Seat {seat.seatNumber}</span>
-          <span className="text-content-secondary">{seat.seatType.toLowerCase()}</span>
+          <span className="font-semibold text-content">Seat {seat.seatNumber}</span>
+          <span className="capitalize text-content-secondary">{seat.seatType.toLowerCase()}</span>
           <span className="text-content-secondary">{statusLabel(seat.status)}</span>
           {selectable && (
-            <span className="text-content">{formatMoney(seat.priceAmount, seat.priceCurrency)}</span>
+            <span className="mt-0.5 font-medium text-content">
+              {formatMoney(seat.priceAmount, seat.priceCurrency)}
+            </span>
           )}
         </span>
       }
     >
-      <Pressable
+      <motion.button
+        type="button"
         onClick={onToggle}
-        disabled={blocked || disabled}
-        ariaPressed={selected}
-        ariaLabel={`Seat ${seat.seatNumber}, ${statusLabel(seat.status)}${
+        disabled={disabled}
+        aria-pressed={selected}
+        aria-label={`Seat ${seat.seatNumber}, ${statusLabel(seat.status)}${
           selectable ? `, ${formatMoney(seat.priceAmount, seat.priceCurrency)}` : ''
         }`}
+        whileHover={disabled || reduced ? undefined : { y: -2 }}
+        whileTap={disabled || reduced ? undefined : { scale: 0.94 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 26 }}
         className={cn(
-          'group relative grid aspect-square w-full place-items-center rounded-sm border',
-          'transition-colors duration-200',
+          'group relative flex aspect-[5/6] w-full flex-col items-center justify-center gap-0.5',
+          // The seat silhouette: rounded seat-back with a squarer base.
+          'rounded-t-lg rounded-b-md border-2 transition-colors duration-200',
+          'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-ring/40',
+
           selected && 'border-accent bg-accent text-white shadow-glow',
-          !selected && selectable && 'border-line-strong bg-elevated text-content-secondary hover:border-accent/50 hover:text-content',
-          blocked && 'border-line bg-white/[0.02] text-content-muted opacity-45',
-          disabled && !selected && !blocked && 'opacity-50',
+
+          !selected &&
+            selectable &&
+            'border-line-strong bg-elevated text-content-secondary hover:border-accent hover:bg-accent-soft hover:text-content',
+
+          blocked &&
+            'cursor-not-allowed border-transparent bg-white/[0.035] text-content-muted/70',
+
+          atLimit && !selected && selectable && 'cursor-not-allowed opacity-40',
         )}
       >
-        <Armchair className="size-4" aria-hidden />
-        <span className="mt-0.5 text-[0.625rem] font-medium tabular-nums">{seat.seatNumber}</span>
-        {seat.wheelchairAccessible && (
-          <Accessibility className="absolute right-0.5 top-0.5 size-2.5 text-info" aria-hidden />
+        {/* Armrest nubs — two hairlines that make the shape read as a seat, not a button. */}
+        {!blocked && (
+          <>
+            <span
+              className={cn(
+                'absolute left-0 top-1/3 h-1/3 w-[3px] rounded-r-full transition-colors',
+                selected ? 'bg-white/45' : 'bg-line-strong group-hover:bg-accent/50',
+              )}
+              aria-hidden
+            />
+            <span
+              className={cn(
+                'absolute right-0 top-1/3 h-1/3 w-[3px] rounded-l-full transition-colors',
+                selected ? 'bg-white/45' : 'bg-line-strong group-hover:bg-accent/50',
+              )}
+              aria-hidden
+            />
+          </>
         )}
-      </Pressable>
+
+        {blocked ? (
+          <CircleSlash className="size-3.5 opacity-60" aria-hidden />
+        ) : selected ? (
+          <motion.span
+            initial={reduced ? false : { scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+          >
+            <Check className="size-4" aria-hidden strokeWidth={3} />
+          </motion.span>
+        ) : null}
+
+        <span
+          className={cn(
+            'text-[0.6875rem] font-semibold tabular-nums leading-none',
+            selected && 'sr-only',
+          )}
+        >
+          {seat.seatNumber}
+        </span>
+
+        {seat.wheelchairAccessible && (
+          <Accessibility
+            className={cn(
+              'absolute right-1 top-1 size-3',
+              selected ? 'text-white/80' : 'text-info',
+            )}
+            aria-hidden
+          />
+        )}
+      </motion.button>
     </Tooltip>
   );
 }
@@ -124,37 +190,82 @@ export function SeatMap({
   const atLimit = selected.length >= maxSelectable;
 
   return (
-    <div className="flex flex-col gap-8">
-      {decks.map(([deck, deckSeats]) => (
-        <section key={deck} aria-label={`${deck.toLowerCase()} deck`}>
-          {decks.length > 1 && (
-            <p className="mb-3 text-micro uppercase text-content-muted">{deck} deck</p>
-          )}
+    <div className="flex flex-col gap-6">
+      {decks.map(([deck, deckSeats]) => {
+        // Chunk into rows so the aisle can be a real grid column.
+        const rows: SeatViewResponse[][] = [];
+        for (let i = 0; i < deckSeats.length; i += SEATS_PER_ROW) {
+          rows.push(deckSeats.slice(i, i + SEATS_PER_ROW));
+        }
+        const availableOnDeck = deckSeats.filter((s) => s.status === SELECTABLE_STATUS).length;
 
-          <div className="rounded-lg border border-line bg-surface p-4 sm:p-5">
-            {/* Driver marker orients the map — without it a seat grid is just a grid. */}
-            <div className="mb-4 flex items-center justify-end gap-2 border-b border-line pb-3">
-              <span className="text-micro uppercase text-content-muted">Front</span>
-              <span className="size-2 rounded-full bg-content-muted" aria-hidden />
+        return (
+          <section key={deck} aria-label={`${deck.toLowerCase()} deck`}>
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h3 className="text-micro uppercase text-content-muted">
+                {decks.length > 1 ? `${deck} deck` : 'Seat map'}
+              </h3>
+              <p className="text-caption text-content-secondary">
+                <span className="font-semibold text-content">{availableOnDeck}</span> of{' '}
+                {deckSeats.length} free
+              </p>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-2.5">
-              {deckSeats.map((seat, index) => (
-                <React.Fragment key={`${deck}-${seat.seatNumber}`}>
-                  <Seat
-                    seat={seat}
-                    selected={selected.includes(seat.seatNumber)}
-                    disabled={atLimit && !selected.includes(seat.seatNumber)}
-                    onToggle={() => onToggle(seat.seatNumber)}
-                  />
-                  {/* Aisle: a blank cell after every second seat in the row. */}
-                  {index % 4 === 1 && <div className="hidden sm:block" aria-hidden />}
-                </React.Fragment>
-              ))}
+            {/* Bus shell */}
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+              {/* Driver row orients the map — without it a seat grid has no front. */}
+              <div className="flex items-center justify-between gap-3 border-b border-line bg-white/[0.02] px-4 py-2.5">
+                <span className="text-micro uppercase text-content-muted">Front</span>
+                <span className="flex items-center gap-1.5 text-content-muted">
+                  <LifeBuoy className="size-4" aria-hidden />
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2 p-4 sm:gap-2.5 sm:p-5">
+                {rows.map((row, rowIndex) => (
+                  <div
+                    key={`${deck}-row-${rowIndex}`}
+                    className="grid items-center gap-2 sm:gap-2.5"
+                    style={{
+                      gridTemplateColumns: `repeat(${AISLE_AFTER}, minmax(0,1fr)) 1.25rem repeat(${
+                        SEATS_PER_ROW - AISLE_AFTER
+                      }, minmax(0,1fr))`,
+                    }}
+                  >
+                    {row.slice(0, AISLE_AFTER).map((seat) => (
+                      <Seat
+                        key={seat.seatNumber}
+                        seat={seat}
+                        selected={selected.includes(seat.seatNumber)}
+                        atLimit={atLimit}
+                        onToggle={() => onToggle(seat.seatNumber)}
+                      />
+                    ))}
+
+                    {/* Aisle: row number, centred */}
+                    <span
+                      className="text-center text-[0.625rem] tabular-nums text-content-muted/60"
+                      aria-hidden
+                    >
+                      {rowIndex + 1}
+                    </span>
+
+                    {row.slice(AISLE_AFTER).map((seat) => (
+                      <Seat
+                        key={seat.seatNumber}
+                        seat={seat}
+                        selected={selected.includes(seat.seatNumber)}
+                        atLimit={atLimit}
+                        onToggle={() => onToggle(seat.seatNumber)}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
-      ))}
+          </section>
+        );
+      })}
 
       <SeatLegend />
     </div>
@@ -165,20 +276,23 @@ export function SeatLegend() {
   const items = [
     { className: 'border-line-strong bg-elevated', label: 'Available' },
     { className: 'border-accent bg-accent', label: 'Selected' },
-    { className: 'border-line bg-white/[0.02] opacity-45', label: 'Unavailable' },
+    { className: 'border-transparent bg-white/[0.035]', label: 'Taken' },
   ];
 
   return (
-    <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
+    <ul className="flex flex-wrap items-center gap-x-5 gap-y-2.5">
       {items.map((item) => (
         <li key={item.label} className="flex items-center gap-2 text-caption text-content-secondary">
-          <span className={cn('size-3.5 rounded-xs border', item.className)} aria-hidden />
+          <span
+            className={cn('size-4 rounded-t-md rounded-b-sm border-2', item.className)}
+            aria-hidden
+          />
           {item.label}
         </li>
       ))}
       <li className="flex items-center gap-2 text-caption text-content-secondary">
-        <Accessibility className="size-3.5 text-info" aria-hidden />
-        Wheelchair accessible
+        <Accessibility className="size-4 text-info" aria-hidden />
+        Accessible
       </li>
     </ul>
   );

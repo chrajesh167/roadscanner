@@ -75,7 +75,7 @@ export function SearchForm({
       onSubmit={handleSubmit(onSubmit)}
       className={cn(
         'rounded-xl p-4 sm:p-5',
-        variant === 'hero' ? 'glass shadow-lg' : 'bg-surface border border-line',
+        variant === 'hero' ? 'bg-elevated border border-line-strong shadow-lg' : 'bg-surface border border-line',
       )}
     >
       <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr_auto_auto] md:items-end md:gap-3">

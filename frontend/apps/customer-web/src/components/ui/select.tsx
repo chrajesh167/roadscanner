@@ -45,7 +45,7 @@ export const SelectContent = React.forwardRef<
         ref={ref}
         position={position}
         className={cn(
-          'pop-panel relative z-50 min-w-[9rem] overflow-hidden rounded-md glass shadow-lg',
+          'pop-panel relative z-50 min-w-[9rem] overflow-hidden rounded-md panel shadow-lg',
           position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
           className,
         )}

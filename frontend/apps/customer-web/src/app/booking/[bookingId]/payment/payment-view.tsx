@@ -165,7 +165,7 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
                         className={cn(
                           'grid size-9 shrink-0 place-items-center rounded-sm border',
                           active
-                            ? 'border-accent/30 bg-accent/15 text-[#b9aaff]'
+                            ? 'border-accent/30 bg-accent/15 text-accent-text'
                             : 'border-line bg-white/[0.03] text-content-muted',
                         )}
                       >

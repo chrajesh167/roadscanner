@@ -15,12 +15,14 @@ export const DialogContent = React.forwardRef<
 >(function DialogContent({ className, children, hideClose = false, ...props }, ref) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="overlay-panel fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+      <DialogPrimitive.Overlay className="overlay-panel fixed inset-0 z-50 bg-black/65 backdrop-blur-[3px]" />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
           'pop-panel fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
-          'rounded-xl glass p-6 shadow-lg sm:p-7',
+          // Solid, not frosted: a modal carries the primary decision on screen, so its text
+          // must not compete with whatever is behind it.
+          'rounded-xl bg-overlay border border-line-strong p-6 shadow-lg sm:p-7',
           className,
         )}
         {...props}

@@ -120,7 +120,7 @@ export function PlaceInput({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 max-h-64 overflow-y-auto rounded-md glass p-1.5 shadow-lg"
+            className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 max-h-64 overflow-y-auto rounded-md panel p-1.5 shadow-lg"
           >
             {suggestions.map((place, index) => (
               <li key={place} id={`${id}-option-${index}`} role="option" aria-selected={index === highlight}>

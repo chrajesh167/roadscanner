@@ -10,72 +10,92 @@
  */
 
 @theme {
-  /* ---- Substrate ------------------------------------------------------- */
-  --color-canvas: #07080b;
-  --color-surface: #0c0e13;
-  --color-elevated: #12151c;
-  --color-overlay: #171b24;
+  /* ---- Substrate -------------------------------------------------------
+   * Lifted off pure black. The old canvas (#07080b) was so dark that cards
+   * had no perceptible elevation and the UI read as a flat void. Each step
+   * is now a visible ~2.5% luminance apart, so surfaces separate without
+   * needing a border to do all the work.
+   */
+  --color-canvas: #0a0c11;
+  --color-surface: #12151c;
+  --color-elevated: #181c25;
+  --color-overlay: #1f242f;
 
   /* ---- Hairlines ------------------------------------------------------- */
-  --color-line: rgba(255, 255, 255, 0.07);
-  --color-line-strong: rgba(255, 255, 255, 0.12);
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.14);
 
-  /* ---- Content --------------------------------------------------------- */
-  --color-content: #f2f3f5;
-  --color-content-secondary: #9ea4b2;
-  --color-content-muted: #666d7d;
+  /* ---- Content ---------------------------------------------------------
+   * Every pairing below clears WCAG AA (4.5:1) on canvas, surface AND
+   * elevated. The previous muted tone sat at 3.5:1 on elevated — legible
+   * as large text only, yet it was used for captions and metadata.
+   */
+  --color-content: #f4f6f8;
+  --color-content-secondary: #b3bac7;
+  --color-content-muted: #8b93a3;
 
-  /* ---- Accent ---------------------------------------------------------- */
-  --color-accent: #7c5cff;
-  --color-accent-hover: #8f73ff;
-  --color-accent-press: #6a48f0;
-  --color-accent-soft: rgba(124, 92, 255, 0.14);
-  --color-accent-ring: rgba(124, 92, 255, 0.45);
+  /* ---- Accent ----------------------------------------------------------
+   * Brightened: the old violet fell below AA on raised surfaces, which
+   * mattered because links and prices use it.
+   */
+  --color-accent: #8b6dff;
+  --color-accent-hover: #9d84ff;
+  --color-accent-press: #7857f5;
+  --color-accent-soft: rgba(139, 109, 255, 0.16);
+  --color-accent-ring: rgba(139, 109, 255, 0.45);
+  /* Accent text on a soft-accent or dark background — 8.3:1 at worst, comfortably AA.
+   * Exists so components stop hardcoding a violet hex outside the token system. */
+  --color-accent-text: #c4b5ff;
 
   /* ---- Status ---------------------------------------------------------- */
-  --color-success: #34d399;
-  --color-success-soft: rgba(52, 211, 153, 0.13);
+  --color-success: #4ade80;
+  --color-success-soft: rgba(74, 222, 128, 0.14);
   --color-warning: #fbbf24;
-  --color-warning-soft: rgba(251, 191, 36, 0.13);
+  --color-warning-soft: rgba(251, 191, 36, 0.14);
   --color-danger: #fb7185;
-  --color-danger-soft: rgba(251, 113, 133, 0.13);
+  --color-danger-soft: rgba(251, 113, 133, 0.14);
   --color-info: #38bdf8;
-  --color-info-soft: rgba(56, 189, 248, 0.13);
+  --color-info-soft: rgba(56, 189, 248, 0.14);
 
   /* ---- Typography ------------------------------------------------------ */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
-  --text-display: 4.25rem;
-  --text-display--line-height: 1.02;
-  --text-display--letter-spacing: -0.045em;
-  --text-display--font-weight: 600;
+  /* A 6-step scale with deliberate gaps. The old h3 (1.375rem) sat too close
+   * to body, so section headings didn't announce themselves; body was 15px,
+   * below comfortable reading size for long-form content. */
+  --text-display: 4rem;
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.04em;
+  --text-display--font-weight: 620;
 
-  --text-h1: 2.75rem;
-  --text-h1--line-height: 1.08;
-  --text-h1--letter-spacing: -0.038em;
-  --text-h1--font-weight: 600;
+  --text-h1: 2.5rem;
+  --text-h1--line-height: 1.12;
+  --text-h1--letter-spacing: -0.032em;
+  --text-h1--font-weight: 620;
 
-  --text-h2: 2rem;
-  --text-h2--line-height: 1.15;
-  --text-h2--letter-spacing: -0.03em;
+  --text-h2: 1.875rem;
+  --text-h2--line-height: 1.2;
+  --text-h2--letter-spacing: -0.024em;
   --text-h2--font-weight: 600;
 
-  --text-h3: 1.375rem;
-  --text-h3--line-height: 1.25;
-  --text-h3--letter-spacing: -0.02em;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.35;
+  --text-h3--letter-spacing: -0.014em;
   --text-h3--font-weight: 600;
 
-  --text-body: 0.9375rem;
+  /* The workhorse. 16px is the smallest size that reads comfortably at
+   * length; captions carry the density instead. */
+  --text-body: 1rem;
   --text-body--line-height: 1.6;
 
-  --text-caption: 0.8125rem;
-  --text-caption--line-height: 1.45;
+  --text-caption: 0.875rem;
+  --text-caption--line-height: 1.5;
 
-  --text-micro: 0.6875rem;
-  --text-micro--line-height: 1.35;
-  --text-micro--letter-spacing: 0.07em;
-  --text-micro--font-weight: 500;
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.4;
+  --text-micro--letter-spacing: 0.06em;
+  --text-micro--font-weight: 600;
 
   /* ---- Radii ----------------------------------------------------------- */
   --radius-xs: 6px;
@@ -152,12 +172,23 @@
 }
 
 @layer components {
-  /* Glassmorphism, used sparingly: the sticky header, dialogs, and floating summary bars. */
+  /* Glass is now reserved for the two places content actually scrolls
+   * underneath: the sticky header and modal overlays. Everywhere else it was
+   * decoration that cost legibility — translucent panels let body text sit
+   * over whatever happened to be behind them, which is exactly what a
+   * contrast audit punishes. */
   .glass {
-    background: color-mix(in srgb, var(--color-surface) 72%, transparent);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
     border: 1px solid var(--color-line);
+  }
+
+  /* Opaque panel for popovers, selects, tooltips and dropdowns — anything
+   * that must stay readable regardless of what it covers. */
+  .panel {
+    background: var(--color-overlay);
+    border: 1px solid var(--color-line-strong);
   }
 
   /* A hairline that fades at both ends — used to separate sections without a hard rule. */
@@ -172,12 +203,14 @@
     );
   }
 
-  /* Ambient aurora used behind hero sections. Pointer-events none, purely decorative. */
+  /* Ambient aurora behind hero sections. Pointer-events none, purely decorative.
+   * Warmed and strengthened slightly to counteract the flat-black impression the
+   * old hero had — this is most of what stops the page reading as a void. */
   .aurora {
     background:
-      radial-gradient(60% 55% at 18% 12%, rgba(124, 92, 255, 0.2), transparent 62%),
-      radial-gradient(48% 42% at 84% 8%, rgba(56, 189, 248, 0.11), transparent 58%),
-      radial-gradient(50% 50% at 50% 100%, rgba(124, 92, 255, 0.08), transparent 60%);
+      radial-gradient(58% 52% at 15% 8%, rgba(139, 109, 255, 0.26), transparent 64%),
+      radial-gradient(46% 40% at 86% 4%, rgba(56, 189, 248, 0.14), transparent 60%),
+      radial-gradient(60% 45% at 50% 100%, rgba(139, 109, 255, 0.1), transparent 62%);
   }
 
   /* Radix overlay motion. Keyframed here rather than pulling in tailwindcss-animate — these two
@@ -232,7 +265,7 @@
   }
 
   .text-gradient {
-    background: linear-gradient(96deg, #ffffff 12%, #b9aaff 58%, #7c5cff 100%);
+    background: linear-gradient(96deg, #ffffff 10%, #d6cdff 46%, #9d84ff 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

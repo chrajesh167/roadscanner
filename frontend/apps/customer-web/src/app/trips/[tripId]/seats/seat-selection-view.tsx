@@ -152,8 +152,9 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
           )}
         </div>
 
-        {/* Selection summary */}
-        <FadeIn delay={0.1} className="lg:sticky lg:top-24">
+        {/* Selection summary — hidden on mobile in favour of the sticky bar below, so the
+            primary action is always reachable while the user is picking seats. */}
+        <FadeIn delay={0.1} className="hidden lg:sticky lg:top-24 lg:block">
           <Card variant="elevated" padding="lg" className="flex flex-col gap-5">
             <div className="flex items-baseline justify-between">
               <h2 className="text-h3">Your selection</h2>
@@ -229,6 +230,40 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
           </Card>
         </FadeIn>
       </div>
+
+      {/* Mobile sticky action bar */}
+      <AnimatePresence>
+        {selected.length > 0 && (
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-line-strong bg-overlay p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg lg:hidden"
+          >
+            <div className="mx-auto flex max-w-2xl items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-caption text-content-secondary">
+                  {selected.length} {selected.length === 1 ? 'seat' : 'seats'} ·{' '}
+                  {selectedSeats.map((s) => s.seatNumber).join(', ')}
+                </p>
+                <p className="text-h3 leading-tight tabular-nums">
+                  {formatMoney(total, currency)}
+                </p>
+              </div>
+              <Button
+                size="lg"
+                loading={holdSeats.isPending}
+                loadingText="Holding"
+                onClick={confirmSelection}
+              >
+                Continue
+                <ArrowRight />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageShell>
   );
 }
