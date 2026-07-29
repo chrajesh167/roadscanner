@@ -63,6 +63,20 @@ info:
 # Operational tuning knobs (docs/services/search-service/boundaries.md, use-cases.md). Values
 # here are the platform baseline, overridable per environment.
 roadscanner:
+  google-places:
+    # Off unless a key is supplied. GOOGLE_PLACES_API_KEY is read server-side only and is never
+    # returned by any endpoint — the browser calls this service, this service calls Google.
+    enabled: ${GOOGLE_PLACES_ENABLED:false}
+    api-key: ${GOOGLE_PLACES_API_KEY:}
+    base-url: https://maps.googleapis.com/maps/api
+    # Autocomplete is on the interactive path; a slow provider must not hold a request thread.
+    request-timeout: PT2S
+    # Longer than the availability cache (PT15S): place names are effectively static, so the
+    # trade-off here is cost against staleness that barely exists.
+    cache-ttl: PT10M
+    cache-max-size: 5000
+    language: en
+    region: IN
   security:
     jwt:
       # Must match auth-service's own issuer claim exactly (docs/services/auth-service/security-design.md).

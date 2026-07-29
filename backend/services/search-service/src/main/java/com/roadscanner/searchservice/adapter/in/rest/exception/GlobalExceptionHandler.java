@@ -5,6 +5,7 @@ import com.roadscanner.searchservice.domain.exception.SearchServiceException;
 import com.roadscanner.searchservice.domain.exception.TripNotFoundException;
 import com.roadscanner.searchservice.location.domain.exception.DuplicateGooglePlaceIdException;
 import com.roadscanner.searchservice.location.domain.exception.LocationNotFoundException;
+import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -93,6 +94,16 @@ public class GlobalExceptionHandler {
         // caller can tell "you sent something wrong" from "someone already claimed this".
         log.warn("Duplicate google place id on {}: {}", request.getRequestURI(), ex.googlePlaceId());
         return respond(HttpStatus.CONFLICT, "That Google place is already mapped to another location", request);
+    }
+
+    @ExceptionHandler(PlaceAutocompleteUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handlePlaceAutocompleteUnavailable(PlaceAutocompleteUnavailableException ex,
+                                                                            HttpServletRequest request) {
+        // 503, not 200-with-empty-results: an outage and "no matching places" are different
+        // answers, and a client that cannot tell them apart will show "no results" during an
+        // incident. Also not 500 — the fault is an upstream dependency's, and it is retryable.
+        log.warn("Place autocomplete provider unavailable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return respond(HttpStatus.SERVICE_UNAVAILABLE, "Place suggestions are temporarily unavailable", request);
     }
 
     @ExceptionHandler(SearchServiceException.class)

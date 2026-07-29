@@ -67,6 +67,10 @@ public class SecurityConfig {
                         // --- Public read surface: unchanged, anonymous, exactly as before. ---
                         .requestMatchers(HttpMethod.GET, LOCATIONS, LOCATION_BY_ID).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
+                        // Place autocomplete: a traveller typing a destination is not logged in.
+                        // It proxies Google server-side purely so the API key never reaches the
+                        // browser — it writes nothing, so there is nothing here to authorize.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/google/places").permitAll()
 
                         // Observability + contract surface, per .claude/ARCHITECTURE_RULES.md.
                         .requestMatchers(

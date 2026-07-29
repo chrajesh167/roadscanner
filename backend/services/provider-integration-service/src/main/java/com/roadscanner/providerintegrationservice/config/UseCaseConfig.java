@@ -36,6 +36,16 @@ import com.roadscanner.providerintegrationservice.domain.service.ProviderClientR
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.roadscanner.providerintegrationservice.application.usecase.registry.ManageProviderCredentialsService;
+import com.roadscanner.providerintegrationservice.application.usecase.registry.ManageProvidersService;
+import com.roadscanner.providerintegrationservice.application.usecase.registry.RefreshProviderSessionService;
+import com.roadscanner.providerintegrationservice.application.usecase.registry.TestProviderConnectionService;
+import com.roadscanner.providerintegrationservice.domain.port.in.ManageProviderCredentials;
+import com.roadscanner.providerintegrationservice.domain.port.in.ManageProviders;
+import com.roadscanner.providerintegrationservice.domain.port.in.RefreshProviderSession;
+import com.roadscanner.providerintegrationservice.domain.port.in.TestProviderConnection;
+import com.roadscanner.providerintegrationservice.domain.port.out.ProviderCredentialsRepository;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -143,5 +153,35 @@ public class UseCaseConfig {
     public SessionExpirySweeper sessionExpirySweeper(SessionRepository sessionRepository, TokenCache tokenCache,
                                                        AuditRecorder auditRecorder, Clock clock) {
         return new SessionExpirySweeper(sessionRepository, tokenCache, auditRecorder, clock);
+    }
+
+    // --- Sprint 2: provider registry administration. ---
+    //
+    // TestProviderConnection and RefreshProviderSession take the existing CheckProviderHealth and
+    // AuthenticateProvider ports rather than their own collaborators: the admin API is a second
+    // trigger for behaviour that already exists, never a second implementation of it.
+
+    @Bean
+    public ManageProviders manageProviders(ProviderConfigurationRepository configurationRepository, Clock clock) {
+        return new ManageProvidersService(configurationRepository, clock);
+    }
+
+    @Bean
+    public ManageProviderCredentials manageProviderCredentials(ProviderCredentialsRepository credentialsRepository,
+                                                               ProviderConfigurationRepository configurationRepository,
+                                                               Clock clock) {
+        return new ManageProviderCredentialsService(credentialsRepository, configurationRepository, clock);
+    }
+
+    @Bean
+    public TestProviderConnection testProviderConnection(ProviderConfigurationRepository configurationRepository,
+                                                         CheckProviderHealth checkProviderHealth) {
+        return new TestProviderConnectionService(configurationRepository, checkProviderHealth);
+    }
+
+    @Bean
+    public RefreshProviderSession refreshProviderSession(ProviderConfigurationRepository configurationRepository,
+                                                         AuthenticateProvider authenticateProvider) {
+        return new RefreshProviderSessionService(configurationRepository, authenticateProvider);
     }
 }

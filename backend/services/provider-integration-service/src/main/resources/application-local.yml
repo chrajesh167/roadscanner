@@ -25,6 +25,11 @@ management:
       show-details: always
 
 roadscanner:
+  security:
+    jwt:
+      # Local development only: a throwaway verification key generated at startup. Tokens minted
+      # by a separately-running auth-service will NOT be accepted. Never set in a deployed env.
+      ephemeral-keys: true
   cors:
     allowed-origins: http://localhost:5173,http://localhost:5174
   provider:

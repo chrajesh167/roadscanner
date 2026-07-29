@@ -3,6 +3,11 @@
 # are NOT set here — TestcontainersConfiguration supplies them via @ServiceConnection.
 
 roadscanner:
+  security:
+    jwt:
+      # Throwaway key pair per test JVM; testsupport.security.TestJwtIssuer mints tokens against
+      # the same pair, so a test can exercise the real decoder end to end.
+      ephemeral-keys: true
   cors:
     allowed-origins: http://localhost:5173
   provider:

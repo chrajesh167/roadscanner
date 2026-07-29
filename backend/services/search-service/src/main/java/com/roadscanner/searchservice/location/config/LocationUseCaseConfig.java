@@ -5,14 +5,18 @@ import com.roadscanner.searchservice.location.application.usecase.DisableLocatio
 import com.roadscanner.searchservice.location.application.usecase.GetLocationService;
 import com.roadscanner.searchservice.location.application.usecase.GetProviderMappingService;
 import com.roadscanner.searchservice.location.application.usecase.SearchLocationsService;
+import com.roadscanner.searchservice.location.application.usecase.SearchPlaceSuggestionsService;
 import com.roadscanner.searchservice.location.application.usecase.UpdateLocationService;
 import com.roadscanner.searchservice.location.domain.port.in.CreateLocation;
 import com.roadscanner.searchservice.location.domain.port.in.DisableLocation;
 import com.roadscanner.searchservice.location.domain.port.in.GetLocation;
 import com.roadscanner.searchservice.location.domain.port.in.GetProviderMapping;
 import com.roadscanner.searchservice.location.domain.port.in.SearchLocations;
+import com.roadscanner.searchservice.location.domain.port.in.SearchPlaceSuggestions;
 import com.roadscanner.searchservice.location.domain.port.in.UpdateLocation;
+import com.roadscanner.searchservice.location.domain.port.out.GooglePlacesClient;
 import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
+import com.roadscanner.searchservice.location.domain.port.out.PlaceSuggestionCache;
 import com.roadscanner.searchservice.location.domain.port.out.ProviderLocationMappingRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -71,5 +75,16 @@ public class LocationUseCaseConfig {
     public GetProviderMapping getProviderMapping(LocationRepository locationRepository,
                                                  ProviderLocationMappingRepository mappingRepository) {
         return new GetProviderMappingService(locationRepository, mappingRepository);
+    }
+
+    /**
+     * Place autocomplete. Takes {@link LocationRepository} only to resolve which suggestions are
+     * already curated — it reads, and cannot write to the catalogue.
+     */
+    @Bean
+    public SearchPlaceSuggestions searchPlaceSuggestions(GooglePlacesClient placesClient,
+                                                         PlaceSuggestionCache cache,
+                                                         LocationRepository locationRepository) {
+        return new SearchPlaceSuggestionsService(placesClient, cache, locationRepository);
     }
 }

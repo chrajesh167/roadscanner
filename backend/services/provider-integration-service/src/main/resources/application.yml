@@ -54,6 +54,11 @@ info:
 # Operational tuning knobs (docs/services/provider-integration-service/). Values here are the
 # platform baseline, overridable per environment.
 roadscanner:
+  security:
+    jwt:
+      # Must match auth-service's own issuer claim exactly
+      # (docs/services/auth-service/security-design.md).
+      issuer: roadscanner-auth-service
   provider:
     health-check-interval: PT30S
     session-expiry-sweep-interval: PT60S

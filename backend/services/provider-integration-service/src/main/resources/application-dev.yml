@@ -22,6 +22,10 @@ management:
       show-details: never
 
 roadscanner:
+  security:
+    jwt:
+      # auth-service's RS256 public key, from the secrets manager. Verification only.
+      public-key-pem: ${JWT_PUBLIC_KEY_PEM}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   provider:

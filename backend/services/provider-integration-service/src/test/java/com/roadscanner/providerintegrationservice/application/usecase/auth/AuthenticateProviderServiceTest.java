@@ -3,6 +3,7 @@ package com.roadscanner.providerintegrationservice.application.usecase.auth;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
@@ -36,8 +37,8 @@ class AuthenticateProviderServiceTest {
         StubProviderClient client = new StubProviderClient(ProviderType.MOCK, Set.of(ProviderCapability.SEARCH));
         ProviderToken token = new ProviderToken("access", "refresh", "Bearer", NOW.plusSeconds(3600));
         client.authenticateResult = () -> token;
-        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, "Mock", true,
-                Set.of(ProviderCapability.SEARCH), null, NOW, NOW));
+        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, ProviderCategory.BUS, "Mock", true,
+                Set.of(ProviderCapability.SEARCH), null, 5_000, 2, NOW, NOW));
 
         AuthenticateProvider service = new AuthenticateProviderService(configurationRepository,
                 new ProviderClientRegistry(List.of(client)), sessionRepository, tokenCache, clock);
@@ -52,8 +53,8 @@ class AuthenticateProviderServiceTest {
 
     @Test
     void rejectsADisabledProvider() {
-        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS, "FlixBus", false,
-                Set.of(ProviderCapability.SEARCH), null, NOW, NOW));
+        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS, ProviderCategory.BUS, "FlixBus", false,
+                Set.of(ProviderCapability.SEARCH), null, 5_000, 2, NOW, NOW));
         AuthenticateProvider service = new AuthenticateProviderService(configurationRepository,
                 new ProviderClientRegistry(List.of()), sessionRepository, tokenCache, clock);
 

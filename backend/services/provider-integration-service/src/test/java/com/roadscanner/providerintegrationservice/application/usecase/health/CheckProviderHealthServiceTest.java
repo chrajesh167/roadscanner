@@ -6,6 +6,7 @@ import com.roadscanner.providerintegrationservice.domain.model.HealthState;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderHealthCheck;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import com.roadscanner.providerintegrationservice.domain.port.in.CheckProviderHealth;
@@ -38,8 +39,8 @@ class CheckProviderHealthServiceTest {
     private final AuditRecorder auditRecorder = new AuditRecorder(auditRecordRepository, auditPublisher, clock);
 
     private CheckProviderHealthService service(StubProviderClient client) {
-        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, "Mock", true,
-                Set.of(ProviderCapability.HEALTH_CHECK), null, NOW, NOW));
+        configurationRepository.add(Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, ProviderCategory.BUS, "Mock", true,
+                Set.of(ProviderCapability.HEALTH_CHECK), null, 5_000, 2, NOW, NOW));
         return new CheckProviderHealthService(configurationRepository, new ProviderClientRegistry(List.of(client)),
                 healthRepository, auditRecorder, clock);
     }

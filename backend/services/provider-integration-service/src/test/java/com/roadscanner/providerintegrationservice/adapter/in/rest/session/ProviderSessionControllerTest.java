@@ -2,6 +2,8 @@ package com.roadscanner.providerintegrationservice.adapter.in.rest.session;
 
 import com.roadscanner.providerintegrationservice.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.roadscanner.providerintegrationservice.adapter.in.rest.filter.CorrelationIdFilter;
+import com.roadscanner.providerintegrationservice.config.SecurityConfig;
+import com.roadscanner.providerintegrationservice.testsupport.security.NoOpJwtDecoderConfig;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSessionId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
@@ -23,7 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProviderSessionController.class)
-@Import({GlobalExceptionHandler.class, CorrelationIdFilter.class})
+@Import({GlobalExceptionHandler.class, CorrelationIdFilter.class, SecurityConfig.class,
+        NoOpJwtDecoderConfig.class})
 class ProviderSessionControllerTest {
 
     @Autowired

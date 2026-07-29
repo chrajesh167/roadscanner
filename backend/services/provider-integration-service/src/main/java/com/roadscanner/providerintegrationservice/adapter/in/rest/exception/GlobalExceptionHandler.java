@@ -5,6 +5,8 @@ import com.roadscanner.providerintegrationservice.domain.exception.BookingFailed
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderAuthenticationException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderIntegrationException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
+import com.roadscanner.providerintegrationservice.domain.exception.DuplicateProviderException;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotFoundException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderTripNotFoundException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.exception.SeatUnavailableException;
@@ -80,6 +82,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleProviderNotSupported(ProviderNotSupportedException ex, HttpServletRequest request) {
         log.info("Provider not supported on {}: {}", request.getRequestURI(), ex.providerType());
         return respond(HttpStatus.NOT_FOUND, "No such provider, or it does not support the requested capability", request);
+    }
+
+    @ExceptionHandler(ProviderNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProviderNotFound(ProviderNotFoundException ex, HttpServletRequest request) {
+        log.info("Provider not found on {}: {}", request.getRequestURI(), ex.reference());
+        return respond(HttpStatus.NOT_FOUND, "No such provider", request);
+    }
+
+    @ExceptionHandler(DuplicateProviderException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateProvider(DuplicateProviderException ex, HttpServletRequest request) {
+        // A conflict with existing state, not malformed input — 409, so the caller can tell
+        // "you sent something wrong" from "that provider is already registered".
+        log.warn("Duplicate provider registration on {}: {}", request.getRequestURI(), ex.providerType());
+        return respond(HttpStatus.CONFLICT, "A provider with this code is already registered", request);
     }
 
     @ExceptionHandler(ProviderTripNotFoundException.class)

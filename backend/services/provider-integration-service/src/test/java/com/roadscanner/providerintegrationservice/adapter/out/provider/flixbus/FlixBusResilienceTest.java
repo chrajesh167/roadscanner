@@ -2,6 +2,7 @@ package com.roadscanner.providerintegrationservice.adapter.out.provider.flixbus;
 
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import com.roadscanner.providerintegrationservice.testsupport.TestcontainersConfiguration;
@@ -55,8 +56,8 @@ class FlixBusResilienceTest {
 
     @Test
     void repeatedConnectionFailuresOpenTheCircuitBreakerAndSurfaceAsProviderUnavailable() {
-        Provider flixbus = Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS, "FlixBus", true,
-                Set.of(), "http://127.0.0.1:1", Instant.now(), Instant.now());
+        Provider flixbus = Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS, ProviderCategory.BUS, "FlixBus", true,
+                Set.of(), "http://127.0.0.1:1", 5_000, 2, Instant.now(), Instant.now());
 
         for (int i = 0; i < 6; i++) {
             assertThatCallFailsWithProviderUnavailable(flixbus);

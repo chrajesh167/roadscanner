@@ -345,12 +345,40 @@ class LocationCatalogueEndToEndTest {
                 .isEqualTo(HttpStatus.OK);
     }
 
+    // ---------- Place autocomplete ----------
+
+    @Test
+    void placeAutocompleteIsPublicAndDegradesHonestlyWhenTheProviderIsNotConfigured() {
+        // The test profile leaves google-places disabled (no API key in CI), so this exercises the
+        // unconfigured path end to end.
+        ResponseEntity<String> response = rest.getForEntity("/api/v1/google/places?q=hyd", String.class);
+
+        // 503, not 401: the endpoint is public. And not 500: an unconfigured or unreachable
+        // provider is an honest, retryable upstream failure, not a bug in this service.
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).doesNotContain("apiKey", "api_key", "GOOGLE_PLACES_API_KEY");
+    }
+
+    @Test
+    void placeAutocompleteValidatesItsQueryBeforeReachingTheProvider() {
+        assertThat(rest.getForEntity("/api/v1/google/places?q=  ", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(rest.getForEntity("/api/v1/google/places", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        // A validation failure must be distinguishable from an outage.
+        assertThat(rest.getForEntity("/api/v1/google/places?q=hyd&limit=99", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     @Test
     void everyLocationEndpointIsPublishedInTheOpenApiSpec() {
         String spec = rest.getForObject("/v3/api-docs", String.class);
 
         // ARCHITECTURE_RULES.md: every service must expose OpenAPI. A route that is not in the
         // published spec is, for an API consumer, a route that does not exist.
+        assertThat(spec).contains("\"/api/v1/google/places\"", "Autocomplete places")
+                .contains("PlaceAutocompleteResponse", "PlaceSuggestion");
+
         assertThat(spec).contains("\"/api/v1/locations\"", "\"/api/v1/locations/{id}\"")
                 .contains("Autocomplete locations", "Get a location", "Create a location (admin)",
                         "Replace a location (admin)", "Withdraw a location (admin)")

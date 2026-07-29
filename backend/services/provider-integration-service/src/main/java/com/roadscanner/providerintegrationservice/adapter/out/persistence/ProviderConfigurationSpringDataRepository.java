@@ -11,4 +11,6 @@ interface ProviderConfigurationSpringDataRepository extends JpaRepository<Provid
     Optional<ProviderConfigurationJpaEntity> findByProviderType(String providerType);
 
     List<ProviderConfigurationJpaEntity> findByEnabledTrue();
+
+    boolean existsByProviderType(String providerType);
 }

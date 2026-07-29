@@ -33,6 +33,15 @@ public class ProviderConfigurationJpaEntity {
     @Column(name = "capabilities", nullable = false)
     private String capabilities;
 
+    @Column(name = "provider_category", nullable = false)
+    private String providerCategory;
+
+    @Column(name = "timeout_ms", nullable = false)
+    private int timeoutMs;
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount;
+
     @Column(name = "base_url")
     private String baseUrl;
 
@@ -47,6 +56,22 @@ public class ProviderConfigurationJpaEntity {
     private long version;
 
     protected ProviderConfigurationJpaEntity() {
+    }
+
+    ProviderConfigurationJpaEntity(UUID id, String providerType, String providerCategory, String displayName,
+                                   boolean enabled, String capabilities, String baseUrl, int timeoutMs,
+                                   int retryCount, Instant createdAt, Instant updatedAt) {
+        this.id = id;
+        this.providerType = providerType;
+        this.providerCategory = providerCategory;
+        this.displayName = displayName;
+        this.enabled = enabled;
+        this.capabilities = capabilities;
+        this.baseUrl = baseUrl;
+        this.timeoutMs = timeoutMs;
+        this.retryCount = retryCount;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     public UUID getId() {
@@ -83,5 +108,49 @@ public class ProviderConfigurationJpaEntity {
 
     public long getVersion() {
         return version;
+    }
+
+    public String getProviderCategory() {
+        return providerCategory;
+    }
+
+    void setProviderCategory(String providerCategory) {
+        this.providerCategory = providerCategory;
+    }
+
+    public int getTimeoutMs() {
+        return timeoutMs;
+    }
+
+    void setTimeoutMs(int timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    void setCapabilities(String capabilities) {
+        this.capabilities = capabilities;
+    }
+
+    void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }
