@@ -3,6 +3,8 @@ package com.roadscanner.searchservice.adapter.in.rest.search;
 import com.roadscanner.searchservice.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.roadscanner.searchservice.adapter.in.rest.filter.CorrelationIdFilter;
 import com.roadscanner.searchservice.config.SearchProperties;
+import com.roadscanner.searchservice.config.SecurityConfig;
+import com.roadscanner.searchservice.testsupport.security.NoOpJwtDecoderConfig;
 import com.roadscanner.searchservice.domain.model.AvailabilityStatus;
 import com.roadscanner.searchservice.domain.model.BusType;
 import com.roadscanner.searchservice.domain.model.FareSnapshot;
@@ -45,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * behavior on a plain configuration record worth mocking anyway.
  */
 @WebMvcTest(SearchController.class)
-@Import({GlobalExceptionHandler.class, CorrelationIdFilter.class, SearchControllerTest.TestConfig.class})
+@Import({GlobalExceptionHandler.class, CorrelationIdFilter.class, SearchControllerTest.TestConfig.class, SecurityConfig.class, NoOpJwtDecoderConfig.class})
 class SearchControllerTest {
 
     private static final int MAX_PAGE_SIZE = 5;

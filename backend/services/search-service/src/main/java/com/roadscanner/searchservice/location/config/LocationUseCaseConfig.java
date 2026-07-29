@@ -1,0 +1,75 @@
+package com.roadscanner.searchservice.location.config;
+
+import com.roadscanner.searchservice.location.application.usecase.CreateLocationService;
+import com.roadscanner.searchservice.location.application.usecase.DisableLocationService;
+import com.roadscanner.searchservice.location.application.usecase.GetLocationService;
+import com.roadscanner.searchservice.location.application.usecase.GetProviderMappingService;
+import com.roadscanner.searchservice.location.application.usecase.SearchLocationsService;
+import com.roadscanner.searchservice.location.application.usecase.UpdateLocationService;
+import com.roadscanner.searchservice.location.domain.port.in.CreateLocation;
+import com.roadscanner.searchservice.location.domain.port.in.DisableLocation;
+import com.roadscanner.searchservice.location.domain.port.in.GetLocation;
+import com.roadscanner.searchservice.location.domain.port.in.GetProviderMapping;
+import com.roadscanner.searchservice.location.domain.port.in.SearchLocations;
+import com.roadscanner.searchservice.location.domain.port.in.UpdateLocation;
+import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
+import com.roadscanner.searchservice.location.domain.port.out.ProviderLocationMappingRepository;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
+
+/**
+ * Explicit bean wiring for the location module's use cases, mirroring the service's existing
+ * {@code UseCaseConfig}: the application classes carry no Spring stereotype annotations and are
+ * plain constructors wired here, so every dependency of every use case is visible in one place
+ * and the application layer stays framework-light.
+ *
+ * <p>Kept separate from the root {@code UseCaseConfig} rather than merged into it, so the module
+ * stays self-contained — a later decision to extract it into its own service is a package move,
+ * not an untangling exercise.
+ */
+@Configuration
+public class LocationUseCaseConfig {
+
+    /**
+     * A single injectable clock for the module. Declared {@code @ConditionalOnMissingBean}-free
+     * on purpose: if the wider service later defines its own {@code Clock} bean this will clash
+     * loudly rather than silently binding two different notions of "now".
+     */
+    @Bean
+    public Clock locationClock() {
+        return Clock.systemUTC();
+    }
+
+    @Bean
+    public SearchLocations searchLocations(LocationRepository repository) {
+        return new SearchLocationsService(repository);
+    }
+
+    @Bean
+    public GetLocation getLocation(LocationRepository repository) {
+        return new GetLocationService(repository);
+    }
+
+    @Bean
+    public CreateLocation createLocation(LocationRepository repository, Clock locationClock) {
+        return new CreateLocationService(repository, locationClock);
+    }
+
+    @Bean
+    public UpdateLocation updateLocation(LocationRepository repository, Clock locationClock) {
+        return new UpdateLocationService(repository, locationClock);
+    }
+
+    @Bean
+    public DisableLocation disableLocation(LocationRepository repository, Clock locationClock) {
+        return new DisableLocationService(repository, locationClock);
+    }
+
+    @Bean
+    public GetProviderMapping getProviderMapping(LocationRepository locationRepository,
+                                                 ProviderLocationMappingRepository mappingRepository) {
+        return new GetProviderMappingService(locationRepository, mappingRepository);
+    }
+}

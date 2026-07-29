@@ -2,6 +2,8 @@ package com.roadscanner.searchservice.adapter.in.rest.suggestion;
 
 import com.roadscanner.searchservice.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.roadscanner.searchservice.config.SearchProperties;
+import com.roadscanner.searchservice.config.SecurityConfig;
+import com.roadscanner.searchservice.testsupport.security.NoOpJwtDecoderConfig;
 import com.roadscanner.searchservice.domain.port.in.GetSearchSuggestions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** See {@code SearchControllerTest}'s Javadoc for why {@link SearchProperties} is supplied as a
  * real instance here rather than a {@code @MockBean}. */
 @WebMvcTest(SuggestionController.class)
-@Import({GlobalExceptionHandler.class, SuggestionControllerTest.TestConfig.class})
+@Import({GlobalExceptionHandler.class, SuggestionControllerTest.TestConfig.class, SecurityConfig.class, NoOpJwtDecoderConfig.class})
 class SuggestionControllerTest {
 
     private static final int DEFAULT_MAX_RESULTS = 7;

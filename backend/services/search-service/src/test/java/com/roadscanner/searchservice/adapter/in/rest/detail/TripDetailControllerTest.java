@@ -1,6 +1,8 @@
 package com.roadscanner.searchservice.adapter.in.rest.detail;
 
 import com.roadscanner.searchservice.adapter.in.rest.exception.GlobalExceptionHandler;
+import com.roadscanner.searchservice.config.SecurityConfig;
+import com.roadscanner.searchservice.testsupport.security.NoOpJwtDecoderConfig;
 import com.roadscanner.searchservice.domain.exception.TripNotFoundException;
 import com.roadscanner.searchservice.domain.model.AvailabilityStatus;
 import com.roadscanner.searchservice.domain.model.BusType;
@@ -32,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TripDetailController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, NoOpJwtDecoderConfig.class})
 class TripDetailControllerTest {
 
     @Autowired

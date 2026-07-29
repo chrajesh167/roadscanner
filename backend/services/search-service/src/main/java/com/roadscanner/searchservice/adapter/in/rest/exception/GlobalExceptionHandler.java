@@ -3,6 +3,8 @@ package com.roadscanner.searchservice.adapter.in.rest.exception;
 import com.roadscanner.searchservice.adapter.in.rest.filter.CorrelationIdFilter;
 import com.roadscanner.searchservice.domain.exception.SearchServiceException;
 import com.roadscanner.searchservice.domain.exception.TripNotFoundException;
+import com.roadscanner.searchservice.location.domain.exception.DuplicateGooglePlaceIdException;
+import com.roadscanner.searchservice.location.domain.exception.LocationNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -76,6 +78,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleTripNotFound(TripNotFoundException ex, HttpServletRequest request) {
         log.info("Trip not found on {}: {}", request.getRequestURI(), ex.tripId());
         return respond(HttpStatus.NOT_FOUND, "Trip not found", request);
+    }
+
+    @ExceptionHandler(LocationNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleLocationNotFound(LocationNotFoundException ex, HttpServletRequest request) {
+        log.info("Location not found on {}: {}", request.getRequestURI(), ex.locationId());
+        return respond(HttpStatus.NOT_FOUND, "Location not found", request);
+    }
+
+    @ExceptionHandler(DuplicateGooglePlaceIdException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateGooglePlaceId(DuplicateGooglePlaceIdException ex,
+                                                                     HttpServletRequest request) {
+        // A genuine conflict with existing state, not malformed input — 409, not 400, so the
+        // caller can tell "you sent something wrong" from "someone already claimed this".
+        log.warn("Duplicate google place id on {}: {}", request.getRequestURI(), ex.googlePlaceId());
+        return respond(HttpStatus.CONFLICT, "That Google place is already mapped to another location", request);
     }
 
     @ExceptionHandler(SearchServiceException.class)

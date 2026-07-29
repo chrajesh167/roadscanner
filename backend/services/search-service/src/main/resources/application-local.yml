@@ -27,8 +27,17 @@ management:
 roadscanner:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:5174
+  security:
+    jwt:
+      # Local development only: a throwaway verification key generated at startup. Tokens minted
+      # by a separately-running auth-service will NOT be accepted — the two processes do not
+      # share key material. Never set this in a deployed environment.
+      ephemeral-keys: true
   inventory-service:
-    base-url: http://localhost:8083
+    # inventory-service runs on 8084 — 8083 is provider-integration-service. Pointing here at
+    # 8083 makes every availability lookup 404, which "degrade, not fail" then hides as a
+    # permanent availabilityKnown=false rather than as an error.
+    base-url: http://localhost:8084
 
 logging:
   level:

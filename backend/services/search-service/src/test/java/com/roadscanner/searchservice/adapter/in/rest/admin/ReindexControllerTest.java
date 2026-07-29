@@ -1,6 +1,8 @@
 package com.roadscanner.searchservice.adapter.in.rest.admin;
 
 import com.roadscanner.searchservice.adapter.in.rest.exception.GlobalExceptionHandler;
+import com.roadscanner.searchservice.config.SecurityConfig;
+import com.roadscanner.searchservice.testsupport.security.NoOpJwtDecoderConfig;
 import com.roadscanner.searchservice.domain.port.in.RebuildIndex;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ReindexController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, NoOpJwtDecoderConfig.class})
 class ReindexControllerTest {
 
     @Autowired

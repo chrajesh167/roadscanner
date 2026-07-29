@@ -6,5 +6,10 @@
 roadscanner:
   cors:
     allowed-origins: http://localhost:5173
+  security:
+    jwt:
+      # Throwaway key pair generated per test JVM; testsupport.security.TestJwtIssuer mints
+      # tokens against the same pair, so a test can exercise the real decoder end to end.
+      ephemeral-keys: true
   inventory-service:
     base-url: http://localhost:0 # overridden per-test via MockRestServiceServer or a dynamic property

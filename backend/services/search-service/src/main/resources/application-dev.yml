@@ -24,6 +24,11 @@ management:
 roadscanner:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  security:
+    jwt:
+      # auth-service's RS256 public key, from the secrets manager. Verification only — this
+      # service never holds a signing key.
+      public-key-pem: ${JWT_PUBLIC_KEY_PEM}
   inventory-service:
     base-url: ${INVENTORY_SERVICE_BASE_URL}
 

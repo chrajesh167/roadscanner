@@ -63,6 +63,13 @@ info:
 # Operational tuning knobs (docs/services/search-service/boundaries.md, use-cases.md). Values
 # here are the platform baseline, overridable per environment.
 roadscanner:
+  security:
+    jwt:
+      # Must match auth-service's own issuer claim exactly (docs/services/auth-service/security-design.md).
+      # The verification key itself is environment-specific: a real public-key-pem in deployed
+      # environments, ephemeral-keys in local/test — see config.JwtConfig, which refuses to start
+      # if neither is supplied.
+      issuer: roadscanner-auth-service
   search:
     pagination:
       default-page-size: 20
