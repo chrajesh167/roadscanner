@@ -4,6 +4,9 @@
 
 roadscanner:
   security:
+    credential-encryption:
+      # Throwaway key per test JVM — encryption is genuinely exercised, no fixture key needed.
+      ephemeral-key: true
     jwt:
       # Throwaway key pair per test JVM; testsupport.security.TestJwtIssuer mints tokens against
       # the same pair, so a test can exercise the real decoder end to end.

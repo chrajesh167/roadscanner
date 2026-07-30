@@ -269,21 +269,23 @@ class ProviderRegistryModelTest {
         }
 
         @Test
-        void rotatingMarksSecretsAsPlaintextAgain() {
+        void rotatingKeepsTheRowMarkedEncrypted() {
             ProviderCredentials credentials = ProviderCredentials.reconstitute(ProviderCredentialsId.generate(),
-                    ProviderId.generate(), null, "old", null, true, CREATED, CREATED);
+                    ProviderId.generate(), null, "old", null, false, CREATED, CREATED);
 
-            credentials.rotate(null, "new-plaintext", null, LATER);
+            credentials.rotate(null, "new-secret", null, LATER);
 
-            // A rotation supplies plaintext whatever the previous row's state was; claiming
-            // otherwise would tell a future migration the row needs no conversion.
-            assertThat(credentials.isEncrypted()).isFalse();
+            // Since Sprint 2.1 every write goes through the encrypting converter, so a rotation
+            // leaves the row encrypted regardless of what it was before — which is also how a
+            // legacy plaintext row gets converted: by being written again.
+            assertThat(credentials.isEncrypted()).isTrue();
         }
 
         @Test
-        void isNotEncryptedInSprint2() {
-            // Pins the disclosed gap: the flag exists, nothing sets it, and V6 documents why.
-            assertThat(withPassword().isEncrypted()).isFalse();
+        void newlyIssuedCredentialsAreMarkedEncrypted() {
+            // Sprint 2.1 made this real: EncryptedCredentialConverter encrypts the secret columns
+            // on every write, so the flag now records an accomplished fact rather than an intent.
+            assertThat(withPassword().isEncrypted()).isTrue();
         }
     }
 }

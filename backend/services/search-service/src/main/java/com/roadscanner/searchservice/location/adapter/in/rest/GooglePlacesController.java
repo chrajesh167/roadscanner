@@ -49,6 +49,7 @@ class GooglePlacesController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Suggestions, best match first (possibly empty)"),
             @ApiResponse(responseCode = "400", description = "Blank query or out-of-range limit"),
+            @ApiResponse(responseCode = "429", description = "Rate limit exceeded — back off and retry"),
             @ApiResponse(responseCode = "503", description = "The place provider is unavailable or not configured")
     })
     PlaceAutocompleteResponse autocomplete(

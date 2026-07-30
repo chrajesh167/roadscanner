@@ -5,7 +5,6 @@ import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ReservationId;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -30,7 +29,6 @@ class FlixBusBookingClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "confirmBookingFallback")
-    @Retry(name = "flixbus")
     BookingConfirmation confirmBooking(ProviderSession session, String providerBlockReference, String providerTripId,
                                         List<PassengerDetail> passengers) {
         try {

@@ -7,7 +7,11 @@ import com.roadscanner.providerintegrationservice.domain.exception.ProviderInteg
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.exception.DuplicateProviderException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotFoundException;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderResponseException;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderTimeoutException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderTripNotFoundException;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderValidationException;
+import com.roadscanner.providerintegrationservice.domain.exception.RateLimitedException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.exception.SeatUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.exception.SessionExpiredException;
@@ -138,6 +142,39 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleProviderUnavailable(ProviderUnavailableException ex, HttpServletRequest request) {
         log.warn("Provider unavailable on {}: {}", request.getRequestURI(), ex.getMessage());
         return respond(HttpStatus.SERVICE_UNAVAILABLE, "The upstream provider is currently unavailable", request);
+    }
+
+    @ExceptionHandler(ProviderTimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleProviderTimeout(ProviderTimeoutException ex, HttpServletRequest request) {
+        // 504, distinct from the 503 an unreachable provider gets: "accepted the call then went
+        // quiet" and "refused the connection" call for different operational responses, and a
+        // caller reading only the status should still be able to tell them apart.
+        log.warn("Provider timed out on {} after {}ms", request.getRequestURI(), ex.timeout().toMillis());
+        return respond(HttpStatus.GATEWAY_TIMEOUT, "The upstream provider did not respond in time", request);
+    }
+
+    @ExceptionHandler(RateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimited(RateLimitedException ex, HttpServletRequest request) {
+        log.warn("Provider rate-limited us on {} (retryAfter={})", request.getRequestURI(),
+                ex.retryAfter().map(java.time.Duration::toString).orElse("unspecified"));
+        return respond(HttpStatus.TOO_MANY_REQUESTS, "The upstream provider is rate limiting requests", request);
+    }
+
+    @ExceptionHandler(ProviderValidationException.class)
+    public ResponseEntity<ErrorResponse> handleProviderValidation(ProviderValidationException ex,
+                                                                  HttpServletRequest request) {
+        // 422, not 502: the provider is working correctly and is telling us the request is wrong.
+        // Reporting that as a gateway failure would send whoever debugs it looking at the provider
+        // instead of at the request we sent.
+        log.warn("Provider rejected the request as invalid on {}: {}", request.getRequestURI(), ex.getMessage());
+        return respond(HttpStatus.UNPROCESSABLE_ENTITY, "The provider rejected the request as invalid", request);
+    }
+
+    @ExceptionHandler(ProviderResponseException.class)
+    public ResponseEntity<ErrorResponse> handleProviderResponse(ProviderResponseException ex,
+                                                                HttpServletRequest request) {
+        log.error("Provider returned an unusable response on {}: {}", request.getRequestURI(), ex.getMessage());
+        return respond(HttpStatus.BAD_GATEWAY, "The provider returned an unusable response", request);
     }
 
     @ExceptionHandler(ProviderIntegrationException.class)

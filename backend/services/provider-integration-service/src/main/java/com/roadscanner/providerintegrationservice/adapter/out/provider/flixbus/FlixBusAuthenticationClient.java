@@ -8,7 +8,6 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -35,7 +34,6 @@ class FlixBusAuthenticationClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "authenticateFallback")
-    @Retry(name = "flixbus")
     ProviderToken authenticate(Provider provider) {
         try {
             FlixBusMapper.TokenResponseDto response = restClient.post()
@@ -55,7 +53,6 @@ class FlixBusAuthenticationClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "refreshFallback")
-    @Retry(name = "flixbus")
     ProviderToken refresh(Provider provider, ProviderSession session) {
         try {
             String refreshToken = session.token().refreshTokenIfPresent()

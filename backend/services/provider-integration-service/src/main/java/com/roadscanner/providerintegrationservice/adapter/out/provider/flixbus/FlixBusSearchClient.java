@@ -4,7 +4,6 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTrip;
 import com.roadscanner.providerintegrationservice.domain.model.SearchCriteria;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -29,7 +28,6 @@ class FlixBusSearchClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "searchFallback")
-    @Retry(name = "flixbus")
     List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
         try {
             FlixBusMapper.TripsResponseDto response = restClient.get()

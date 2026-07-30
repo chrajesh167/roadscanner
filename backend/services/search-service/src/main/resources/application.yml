@@ -77,6 +77,12 @@ roadscanner:
     cache-max-size: 5000
     language: en
     region: IN
+    # Per-instance ceiling on calls that actually reach Google; the cache absorbs repeats before
+    # this is consulted. With N replicas the effective global rate is N x this value.
+    rate-limit-requests-per-minute: 600
+    # Autocomplete is bursty by nature — a user types several characters in a second — so a burst
+    # allowance keeps normal typing from being refused while the sustained rate still holds.
+    rate-limit-burst-size: 60
   security:
     jwt:
       # Must match auth-service's own issuer claim exactly (docs/services/auth-service/security-design.md).

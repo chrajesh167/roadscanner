@@ -21,10 +21,15 @@ import java.util.Objects;
  *
  * @param cacheTtl     how long a successful autocomplete answer stays cached
  * @param cacheMaxSize maximum cached queries; the oldest are evicted past this
+ * @param rateLimitRequestsPerMinute sustained ceiling on calls that reach the provider, per
+ *                                   instance — see {@code TokenBucketPlaceAutocompleteRateLimiter}
+ * @param rateLimitBurstSize         how many permits may accumulate, so a user typing quickly is
+ *                                   not refused for behaving normally
  */
 @ConfigurationProperties(prefix = "roadscanner.google-places")
 public record GooglePlacesProperties(boolean enabled, String apiKey, String baseUrl, Duration requestTimeout,
-                                     Duration cacheTtl, int cacheMaxSize, String language, String region) {
+                                     Duration cacheTtl, int cacheMaxSize, String language, String region,
+                                     int rateLimitRequestsPerMinute, int rateLimitBurstSize) {
 
     public GooglePlacesProperties {
         Objects.requireNonNull(baseUrl, "roadscanner.google-places.base-url must be set");
@@ -32,6 +37,14 @@ public record GooglePlacesProperties(boolean enabled, String apiKey, String base
         Objects.requireNonNull(cacheTtl, "roadscanner.google-places.cache-ttl must be set");
         if (cacheMaxSize < 1) {
             throw new IllegalArgumentException("roadscanner.google-places.cache-max-size must be at least 1");
+        }
+        if (rateLimitRequestsPerMinute < 1) {
+            throw new IllegalArgumentException(
+                    "roadscanner.google-places.rate-limit-requests-per-minute must be at least 1");
+        }
+        if (rateLimitBurstSize < 1) {
+            throw new IllegalArgumentException(
+                    "roadscanner.google-places.rate-limit-burst-size must be at least 1");
         }
     }
 

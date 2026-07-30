@@ -1,6 +1,7 @@
 package com.roadscanner.providerintegrationservice.adapter.out.persistence;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -19,6 +20,16 @@ import java.util.UUID;
  *
  * <p>Deliberately has no {@code toString()} — the inherited identity one cannot print a secret,
  * whereas a generated or hand-written one eventually would.
+ *
+ * <p>{@code partnerPassword} and {@code partnerToken} carry
+ * {@link EncryptedCredentialConverter}, so Hibernate encrypts them on write and decrypts them on
+ * read. Nothing above this class participates: the aggregate and every use case see plaintext,
+ * the database only ever holds ciphertext.
+ *
+ * <p>{@code partnerEmail} is intentionally not encrypted. It identifies a partner account rather
+ * than granting access to one, and leaving it queryable keeps "which account is this row for"
+ * answerable during an incident without a decryption key. It is still never returned by any
+ * endpoint.
  */
 @Entity
 @Table(name = "provider_credentials")
@@ -34,9 +45,11 @@ public class ProviderCredentialsJpaEntity {
     @Column(name = "partner_email")
     private String partnerEmail;
 
+    @Convert(converter = EncryptedCredentialConverter.class)
     @Column(name = "partner_password")
     private String partnerPassword;
 
+    @Convert(converter = EncryptedCredentialConverter.class)
     @Column(name = "partner_token")
     private String partnerToken;
 

@@ -1,10 +1,12 @@
 package com.roadscanner.searchservice.location.application.usecase;
 
+import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteRateLimitedException;
 import com.roadscanner.searchservice.location.domain.model.GooglePlaceId;
 import com.roadscanner.searchservice.location.domain.model.PlaceSuggestion;
 import com.roadscanner.searchservice.location.domain.port.in.SearchPlaceSuggestions;
 import com.roadscanner.searchservice.location.domain.port.out.GooglePlacesClient;
 import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
+import com.roadscanner.searchservice.location.domain.port.out.PlaceAutocompleteRateLimiter;
 import com.roadscanner.searchservice.location.domain.port.out.PlaceSuggestionCache;
 
 import java.util.List;
@@ -38,12 +40,15 @@ public class SearchPlaceSuggestionsService implements SearchPlaceSuggestions {
 
     private final GooglePlacesClient placesClient;
     private final PlaceSuggestionCache cache;
+    private final PlaceAutocompleteRateLimiter rateLimiter;
     private final LocationRepository locationRepository;
 
     public SearchPlaceSuggestionsService(GooglePlacesClient placesClient, PlaceSuggestionCache cache,
+                                         PlaceAutocompleteRateLimiter rateLimiter,
                                          LocationRepository locationRepository) {
         this.placesClient = placesClient;
         this.cache = cache;
+        this.rateLimiter = rateLimiter;
         this.locationRepository = locationRepository;
     }
 
@@ -54,6 +59,13 @@ public class SearchPlaceSuggestionsService implements SearchPlaceSuggestions {
         Optional<List<PlaceSuggestion>> cached = cache.get(command.query(), effectiveLimit);
         if (cached.isPresent()) {
             return new SearchPlaceSuggestionsResult(enrich(cached.get()), true);
+        }
+
+        // Checked after the cache, never before: a cache hit costs the provider nothing, so
+        // spending a permit on it would throttle traffic that was never going to reach Google.
+        if (!rateLimiter.tryAcquire()) {
+            throw new PlaceAutocompleteRateLimitedException(
+                    "Place autocomplete rate limit exceeded for this instance");
         }
 
         // A failure here propagates. Nothing below it runs, so nothing is cached.

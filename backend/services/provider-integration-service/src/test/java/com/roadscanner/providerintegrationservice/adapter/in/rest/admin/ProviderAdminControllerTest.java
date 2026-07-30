@@ -351,7 +351,7 @@ class ProviderAdminControllerTest {
     @Test
     void storesCredentialsAndReportsOnlyTheirPresence() throws Exception {
         when(manageCredentials.summarise(any())).thenReturn(Optional.of(
-                new ManageProviderCredentials.CredentialsSummary(true, false, false, NOW)));
+                new ManageProviderCredentials.CredentialsSummary(true, false, true, NOW)));
 
         String body = mockMvc.perform(put("/api/v1/providers/{id}/credentials", UUID.randomUUID()).with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -360,7 +360,7 @@ class ProviderAdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasPassword").value(true))
                 .andExpect(jsonPath("$.hasToken").value(false))
-                .andExpect(jsonPath("$.encrypted").value(false))
+                .andExpect(jsonPath("$.encrypted").value(true))
                 .andReturn().getResponse().getContentAsString();
 
         // Write-only: an admin can replace credentials but never read them back, so a compromised

@@ -30,10 +30,23 @@ public interface ManageProviderCredentials {
         public StoreCredentialsCommand {
             Objects.requireNonNull(providerId, "providerId must not be null");
         }
+
+        /**
+         * Overridden for the same reason {@code ProviderCredentialsRequest} overrides it: a
+         * record's generated {@code toString()} renders every component, so the default would
+         * print the password and token in the clear anywhere this command reached a log line or
+         * an exception message.
+         */
+        @Override
+        public String toString() {
+            return "StoreCredentialsCommand[provider=" + providerId
+                    + ", password=" + (partnerPassword == null ? "absent" : "set")
+                    + ", token=" + (partnerToken == null ? "absent" : "set") + "]";
+        }
     }
 
-    /** @param encrypted whether this row's secrets are encrypted at rest. Always false in Sprint 2
-     *                   — see {@code ProviderCredentials}'s Javadoc. */
+    /** @param encrypted whether this row's secrets are encrypted at rest — true for anything
+     *                   written since Sprint 2.1; see {@code ProviderCredentials}'s Javadoc. */
     record CredentialsSummary(boolean hasPassword, boolean hasToken, boolean encrypted,
                               java.time.Instant updatedAt) {
     }

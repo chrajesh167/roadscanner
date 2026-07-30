@@ -33,6 +33,9 @@ import com.roadscanner.providerintegrationservice.domain.port.out.ProviderHealth
 import com.roadscanner.providerintegrationservice.domain.port.out.SessionRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.TokenCache;
 import com.roadscanner.providerintegrationservice.domain.service.ProviderClientRegistry;
+import com.roadscanner.providerintegrationservice.execution.BackoffStrategy;
+import com.roadscanner.providerintegrationservice.execution.ExecutionPolicyProviderClient;
+import com.roadscanner.providerintegrationservice.execution.ProviderExecutionExecutor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -70,8 +73,18 @@ public class UseCaseConfig {
     }
 
     @Bean
-    public ProviderClientRegistry providerClientRegistry(List<ProviderClient> providerClients) {
-        return new ProviderClientRegistry(providerClients);
+    public ProviderClientRegistry providerClientRegistry(List<ProviderClient> providerClients,
+                                                        ProviderConfigurationRepository configurationRepository,
+                                                        ProviderExecutionExecutor executionExecutor,
+                                                        BackoffStrategy providerBackoffStrategy) {
+        // Every client is wrapped, so timeout/retry/backoff/metrics/correlation-id apply to all
+        // providers identically and a new adapter inherits them by existing. Wrapping here rather
+        // than in each adapter is what stops a provider from quietly opting out.
+        List<ProviderClient> managed = providerClients.stream()
+                .map(client -> (ProviderClient) new ExecutionPolicyProviderClient(
+                        client, configurationRepository, executionExecutor, providerBackoffStrategy))
+                .toList();
+        return new ProviderClientRegistry(managed);
     }
 
     @Bean

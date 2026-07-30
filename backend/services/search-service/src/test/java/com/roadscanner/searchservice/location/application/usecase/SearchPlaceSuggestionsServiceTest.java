@@ -1,5 +1,6 @@
 package com.roadscanner.searchservice.location.application.usecase;
 
+import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteRateLimitedException;
 import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteUnavailableException;
 import com.roadscanner.searchservice.location.domain.model.GooglePlaceId;
 import com.roadscanner.searchservice.location.domain.model.Location;
@@ -8,6 +9,7 @@ import com.roadscanner.searchservice.location.domain.model.LocationId;
 import com.roadscanner.searchservice.location.domain.model.PlaceSuggestion;
 import com.roadscanner.searchservice.location.domain.port.in.SearchPlaceSuggestions;
 import com.roadscanner.searchservice.location.testsupport.InMemoryLocationRepository;
+import com.roadscanner.searchservice.location.testsupport.ControllablePlaceAutocompleteRateLimiter;
 import com.roadscanner.searchservice.location.testsupport.InMemoryPlaceSuggestionCache;
 import com.roadscanner.searchservice.location.testsupport.StubGooglePlacesClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,7 @@ class SearchPlaceSuggestionsServiceTest {
     private StubGooglePlacesClient places;
     private InMemoryPlaceSuggestionCache cache;
     private InMemoryLocationRepository locations;
+    private ControllablePlaceAutocompleteRateLimiter rateLimiter;
     private SearchPlaceSuggestions useCase;
 
     @BeforeEach
@@ -39,7 +42,8 @@ class SearchPlaceSuggestionsServiceTest {
         places = new StubGooglePlacesClient();
         cache = new InMemoryPlaceSuggestionCache();
         locations = new InMemoryLocationRepository();
-        useCase = new SearchPlaceSuggestionsService(places, cache, locations);
+        rateLimiter = new ControllablePlaceAutocompleteRateLimiter();
+        useCase = new SearchPlaceSuggestionsService(places, cache, rateLimiter, locations);
     }
 
     private SearchPlaceSuggestions.SearchPlaceSuggestionsResult search(String query, int limit) {
@@ -216,6 +220,62 @@ class SearchPlaceSuggestionsServiceTest {
 
             assertThat(fromCache.cached()).isTrue();
             assertThat(fromCache.suggestions().getFirst().locationIdIfPresent()).contains(curated.id());
+        }
+    }
+
+    @Nested
+    class RateLimiting {
+
+        @Test
+        void refusesTheCallWhenTheLimitIsExhausted() {
+            places.returning(suggestion("place-hyd", "Hyderabad, Telangana, India"));
+            rateLimiter.exhausted();
+
+            assertThatThrownBy(() -> search("hyd", 5))
+                    .isInstanceOf(PlaceAutocompleteRateLimitedException.class);
+
+            // Refused before the paid call, which is the entire point.
+            assertThat(places.calls()).isEmpty();
+        }
+
+        @Test
+        void doesNotCacheARefusal() {
+            places.returning(suggestion("place-hyd", "Hyderabad, Telangana, India"));
+            rateLimiter.exhausted();
+
+            assertThatThrownBy(() -> search("hyd", 5))
+                    .isInstanceOf(PlaceAutocompleteRateLimitedException.class);
+
+            // Caching a throttle would extend a momentary limit into a full TTL of empty results.
+            assertThat(cache.writes()).isEmpty();
+        }
+
+        @Test
+        void neverSpendsAPermitOnACacheHit() {
+            places.returning(suggestion("place-hyd", "Hyderabad, Telangana, India"));
+            search("hyd", 5);
+            int afterFirstCall = rateLimiter.acquireAttempts();
+
+            search("hyd", 5);
+
+            // A cache hit costs the provider nothing, so throttling it would refuse traffic that
+            // was never going to reach Google.
+            assertThat(afterFirstCall).isEqualTo(1);
+            assertThat(rateLimiter.acquireAttempts()).isEqualTo(1);
+        }
+
+        @Test
+        void stillServesCachedAnswersWhileThrottled() {
+            places.returning(suggestion("place-hyd", "Hyderabad, Telangana, India"));
+            search("hyd", 5);
+            rateLimiter.exhausted();
+
+            var cachedAnswer = search("hyd", 5);
+
+            // Being over the provider limit must not take the whole feature down for queries we
+            // can already answer for free.
+            assertThat(cachedAnswer.cached()).isTrue();
+            assertThat(cachedAnswer.suggestions()).hasSize(1);
         }
     }
 }

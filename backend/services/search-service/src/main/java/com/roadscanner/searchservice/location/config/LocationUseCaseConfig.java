@@ -16,6 +16,7 @@ import com.roadscanner.searchservice.location.domain.port.in.SearchPlaceSuggesti
 import com.roadscanner.searchservice.location.domain.port.in.UpdateLocation;
 import com.roadscanner.searchservice.location.domain.port.out.GooglePlacesClient;
 import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
+import com.roadscanner.searchservice.location.domain.port.out.PlaceAutocompleteRateLimiter;
 import com.roadscanner.searchservice.location.domain.port.out.PlaceSuggestionCache;
 import com.roadscanner.searchservice.location.domain.port.out.ProviderLocationMappingRepository;
 import org.springframework.context.annotation.Bean;
@@ -84,7 +85,8 @@ public class LocationUseCaseConfig {
     @Bean
     public SearchPlaceSuggestions searchPlaceSuggestions(GooglePlacesClient placesClient,
                                                          PlaceSuggestionCache cache,
+                                                         PlaceAutocompleteRateLimiter rateLimiter,
                                                          LocationRepository locationRepository) {
-        return new SearchPlaceSuggestionsService(placesClient, cache, locationRepository);
+        return new SearchPlaceSuggestionsService(placesClient, cache, rateLimiter, locationRepository);
     }
 }

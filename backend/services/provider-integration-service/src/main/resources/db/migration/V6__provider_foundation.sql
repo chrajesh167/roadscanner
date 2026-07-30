@@ -32,11 +32,12 @@ ALTER TABLE provider_configurations
 
 -- Partner credentials, one row per provider.
 --
--- SECURITY: these columns are NOT encrypted at rest by this migration. `encrypted` records the
--- intent for a given row, not an accomplished fact — nothing in Sprint 2 encrypts or decrypts.
--- Until a KMS-backed converter exists, treat this table as holding secrets in plaintext: restrict
--- database access accordingly, and never widen the admin API to return these values (it currently
--- reports only whether credentials are present — see ProviderCredentialsResponse).
+-- SECURITY: partner_password and partner_token hold ciphertext, not plaintext. Sprint 2.1 added
+-- EncryptedCredentialConverter (AES-256-GCM) on both columns, so Hibernate encrypts on write and
+-- decrypts on read; values are scheme-tagged `enc:v1:` so rows written before that still decrypt.
+-- `encrypted` records which rows have been through it. partner_email is deliberately readable —
+-- an account identifier, not a secret. Never widen the admin API to return these values: it
+-- reports only whether credentials are present (see ProviderCredentialsResponse).
 CREATE TABLE provider_credentials
 (
     id               UUID PRIMARY KEY,

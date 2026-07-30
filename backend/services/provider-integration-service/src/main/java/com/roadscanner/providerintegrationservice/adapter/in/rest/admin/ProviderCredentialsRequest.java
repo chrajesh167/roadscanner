@@ -26,4 +26,20 @@ public record ProviderCredentialsRequest(
         @Schema(description = "Pre-issued partner token. Write-only — never returned by any endpoint.")
         String partnerToken
 ) {
+
+    /**
+     * Overridden because a record's generated {@code toString()} prints every component — this one
+     * would render the password and token in the clear. That is one careless {@code log.debug(...)},
+     * one framework that echoes a handler argument, or one exception message embedding the bound
+     * object away from writing a partner secret to disk.
+     *
+     * <p>Presence is reported instead of value, which is all anyone debugging a failed credential
+     * write actually needs.
+     */
+    @Override
+    public String toString() {
+        return "ProviderCredentialsRequest[email=" + (partnerEmail == null ? "absent" : "set")
+                + ", password=" + (partnerPassword == null ? "absent" : "set")
+                + ", token=" + (partnerToken == null ? "absent" : "set") + "]";
+    }
 }

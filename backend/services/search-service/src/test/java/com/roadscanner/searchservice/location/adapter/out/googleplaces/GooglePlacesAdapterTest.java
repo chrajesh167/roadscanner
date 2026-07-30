@@ -38,7 +38,7 @@ class GooglePlacesAdapterTest {
 
     private static GooglePlacesProperties properties(boolean enabled, String apiKey) {
         return new GooglePlacesProperties(enabled, apiKey, BASE_URL, Duration.ofSeconds(2),
-                Duration.ofMinutes(10), 5_000, "en", "IN");
+                Duration.ofMinutes(10), 5_000, "en", "IN", 600, 60);
     }
 
     @BeforeEach

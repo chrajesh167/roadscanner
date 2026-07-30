@@ -5,7 +5,6 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.SeatNumber;
 import com.roadscanner.providerintegrationservice.domain.model.SeatReservation;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -34,7 +33,6 @@ class FlixBusSeatClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "getSeatMapFallback")
-    @Retry(name = "flixbus")
     ProviderSeatMap getSeatMap(ProviderSession session, String providerTripId) {
         try {
             FlixBusMapper.SeatMapResponseDto response = restClient.get()
@@ -54,7 +52,6 @@ class FlixBusSeatClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "blockSeatsFallback")
-    @Retry(name = "flixbus")
     SeatReservation blockSeats(ProviderSession session, String providerTripId, List<SeatNumber> seatNumbers) {
         try {
             FlixBusMapper.BlockResponseDto response = restClient.post()
@@ -76,7 +73,6 @@ class FlixBusSeatClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "releaseSeatsFallback")
-    @Retry(name = "flixbus")
     void releaseSeats(ProviderSession session, String providerBlockReference) {
         try {
             restClient.delete()

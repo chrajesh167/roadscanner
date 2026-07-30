@@ -18,11 +18,11 @@ import java.util.Optional;
  *       Writing them is allowed; reading them back is not.</li>
  * </ul>
  *
- * <p><strong>Not encrypted at rest in Sprint 2.</strong> {@code encrypted} records the intent for a
- * row, not an accomplished fact — nothing here encrypts or decrypts. Until a KMS-backed converter
- * exists, these values sit in the database in plaintext and database access must be restricted
- * accordingly. The flag exists now so that a later migration can distinguish already-converted
- * rows from ones still needing it, without a schema change at that point.
+ * <p><strong>Encrypted at rest since Sprint 2.1.</strong> The aggregate deals in plaintext
+ * throughout — encryption happens in the persistence layer via {@code EncryptedCredentialConverter}
+ * — so nothing here has to remember to encrypt, and no future write path can forget to.
+ * {@code encrypted} records that a row was written under that scheme; rows predating it decrypt
+ * leniently and are re-stored encrypted on their next write.
  *
  * <p>A provider may authenticate by email/password, by a pre-issued token, or by both — which is
  * why all three fields are optional individually and only the "at least one" rule is enforced.
@@ -54,7 +54,7 @@ public final class ProviderCredentials {
 
     public static ProviderCredentials issue(ProviderCredentialsId id, ProviderId providerId, String partnerEmail,
                                             String partnerPassword, String partnerToken, Instant now) {
-        return new ProviderCredentials(id, providerId, partnerEmail, partnerPassword, partnerToken, false, now, now);
+        return new ProviderCredentials(id, providerId, partnerEmail, partnerPassword, partnerToken, true, now, now);
     }
 
     /** Rehydrates from persisted state. Trusts the state is already valid. */
@@ -70,8 +70,9 @@ public final class ProviderCredentials {
         this.partnerEmail = normalise(partnerEmail);
         this.partnerPassword = normalise(partnerPassword);
         this.partnerToken = normalise(partnerToken);
-        // A rotation supplies plaintext, whatever the previous row's state was.
-        this.encrypted = false;
+        // Rotations are written through the encrypting converter like every other write, so the
+        // row is encrypted regardless of what the previous one was.
+        this.encrypted = true;
         this.updatedAt = Objects.requireNonNull(now, "now must not be null");
         requireSomethingToAuthenticateWith();
     }

@@ -23,8 +23,8 @@ public record ProviderCredentialsResponse(
         @Schema(description = "True when a partner token is stored")
         boolean hasToken,
 
-        @Schema(description = "Whether these secrets are encrypted at rest. False throughout "
-                + "Sprint 2 — no encryption is implemented yet; see V6__provider_foundation.sql.")
+        @Schema(description = "Whether these secrets are encrypted at rest. True for anything "
+                + "written since Sprint 2.1; rows predating it report false until their next write.")
         boolean encrypted,
 
         Instant updatedAt

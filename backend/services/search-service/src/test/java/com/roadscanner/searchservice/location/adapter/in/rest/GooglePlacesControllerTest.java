@@ -3,6 +3,7 @@ package com.roadscanner.searchservice.location.adapter.in.rest;
 import com.roadscanner.searchservice.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.roadscanner.searchservice.adapter.in.rest.filter.CorrelationIdFilter;
 import com.roadscanner.searchservice.config.SecurityConfig;
+import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteRateLimitedException;
 import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteUnavailableException;
 import com.roadscanner.searchservice.location.domain.model.GooglePlaceId;
 import com.roadscanner.searchservice.location.domain.model.LocationId;
@@ -174,5 +175,29 @@ class GooglePlacesControllerTest {
         // The raw provider message can carry the key or billing detail; it belongs in the log.
         org.assertj.core.api.Assertions.assertThat(body)
                 .doesNotContain("AIzaSyExampleKey", "REQUEST_DENIED");
+    }
+
+    @Test
+    void reportsRateLimitingAsTooManyRequests() throws Exception {
+        when(searchPlaceSuggestions.search(any()))
+                .thenThrow(new PlaceAutocompleteRateLimitedException("limit exceeded"));
+
+        // 429, not 503: this is us declining to spend quota, not the provider failing. A client
+        // that cannot tell them apart does not know whether backing off will help.
+        mockMvc.perform(get("/api/v1/google/places").param("q", "hyd"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message").value("Too many place suggestion requests — please slow down"));
+    }
+
+    @Test
+    void aRateLimitedResponseCarriesNoProviderDetail() throws Exception {
+        when(searchPlaceSuggestions.search(any()))
+                .thenThrow(new PlaceAutocompleteRateLimitedException("internal bucket state"));
+
+        String body = mockMvc.perform(get("/api/v1/google/places").param("q", "hyd"))
+                .andExpect(status().isTooManyRequests())
+                .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(body).doesNotContain("internal bucket state");
     }
 }

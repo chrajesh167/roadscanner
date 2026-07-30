@@ -1,5 +1,6 @@
 package com.roadscanner.providerintegrationservice.adapter.out.persistence;
 
+import com.roadscanner.providerintegrationservice.adapter.out.security.AesGcmCredentialCipher;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
@@ -7,6 +8,7 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderCredentia
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCredentialsId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
+import com.roadscanner.providerintegrationservice.testsupport.CredentialEncryptionTestConfig;
 import com.roadscanner.providerintegrationservice.testsupport.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +34,8 @@ import static org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTest
  */
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, ProviderConfigurationRepositoryAdapter.class,
-        ProviderCredentialsRepositoryAdapter.class})
+        ProviderCredentialsRepositoryAdapter.class, CredentialEncryptionTestConfig.class,
+        EncryptedCredentialConverter.class})
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 class ProviderRegistryRepositoryAdapterTest {
 
@@ -183,7 +186,8 @@ class ProviderRegistryRepositoryAdapterTest {
         assertThat(found.partnerEmail()).contains("partner@roadscanner.com");
         assertThat(found.hasPassword()).isTrue();
         assertThat(found.hasToken()).isTrue();
-        assertThat(found.isEncrypted()).isFalse();
+        // Written through the encrypting converter — the flag now records an accomplished fact.
+        assertThat(found.isEncrypted()).isTrue();
     }
 
     @Test
@@ -222,6 +226,94 @@ class ProviderRegistryRepositoryAdapterTest {
                     null, "second", null, NOW));
             entityManager.flush();
         }).hasStackTraceContaining("uq_provider_credentials_provider");
+    }
+
+    // ---------- Encryption at rest ----------
+
+    @Test
+    void storesSecretsEncryptedInTheDatabase() {
+        Provider provider = register(uniqueType());
+        credentials.save(ProviderCredentials.issue(ProviderCredentialsId.generate(), provider.id(),
+                "partner@roadscanner.com", "s3cret-password", "s3cret-token", NOW));
+        reload();
+
+        // Read the raw columns, bypassing JPA entirely — this is the only way to prove what is
+        // actually on disk rather than what the converter hands back.
+        Object[] raw = (Object[]) entityManager.getEntityManager()
+                .createNativeQuery("""
+                        SELECT partner_password, partner_token, partner_email
+                        FROM provider_credentials WHERE provider_id = :providerId
+                        """)
+                .setParameter("providerId", provider.id().value())
+                .getSingleResult();
+
+        String storedPassword = (String) raw[0];
+        String storedToken = (String) raw[1];
+        String storedEmail = (String) raw[2];
+
+        assertThat(storedPassword).isNotNull().doesNotContain("s3cret-password")
+                .startsWith(AesGcmCredentialCipher.SCHEME);
+        assertThat(storedToken).isNotNull().doesNotContain("s3cret-token")
+                .startsWith(AesGcmCredentialCipher.SCHEME);
+        // Email is deliberately not encrypted — an account identifier, not a secret.
+        assertThat(storedEmail).isEqualTo("partner@roadscanner.com");
+    }
+
+    @Test
+    void returnsDecryptedSecretsWhenRead() {
+        Provider provider = register(uniqueType());
+        credentials.save(ProviderCredentials.issue(ProviderCredentialsId.generate(), provider.id(),
+                null, "s3cret-password", "s3cret-token", NOW));
+        reload();
+
+        ProviderCredentials found = credentials.findByProvider(provider.id()).orElseThrow();
+
+        // Transparent: nothing above the persistence layer decrypts anything.
+        assertThat(found.partnerPassword()).contains("s3cret-password");
+        assertThat(found.partnerToken()).contains("s3cret-token");
+        assertThat(found.isEncrypted()).isTrue();
+    }
+
+    @Test
+    void encryptsSecretsOnRotationToo() {
+        Provider provider = register(uniqueType());
+        ProviderCredentials stored = credentials.save(ProviderCredentials.issue(
+                ProviderCredentialsId.generate(), provider.id(), null, "original", null, NOW));
+
+        stored.rotate(null, null, "rotated-token", NOW.plusSeconds(60));
+        credentials.save(stored);
+        reload();
+
+        String storedToken = (String) entityManager.getEntityManager()
+                .createNativeQuery("SELECT partner_token FROM provider_credentials WHERE provider_id = :providerId")
+                .setParameter("providerId", provider.id().value())
+                .getSingleResult();
+
+        // Every write path encrypts, not just the first — the converter is on the column, so a
+        // new write path cannot forget.
+        assertThat(storedToken).doesNotContain("rotated-token").startsWith(AesGcmCredentialCipher.SCHEME);
+        assertThat(credentials.findByProvider(provider.id()).orElseThrow().partnerToken())
+                .contains("rotated-token");
+    }
+
+    @Test
+    void readsLegacyPlaintextRowsWrittenBeforeEncryption() {
+        Provider provider = register(uniqueType());
+        reload();
+
+        // Simulates a row written before Sprint 2.1 — inserted straight past the converter.
+        entityManager.getEntityManager().createNativeQuery("""
+                INSERT INTO provider_credentials
+                  (id, provider_id, partner_email, partner_password, partner_token, encrypted, created_at, updated_at)
+                VALUES (gen_random_uuid(), :providerId, NULL, 'legacy-plaintext', NULL, false, now(), now())
+                """)
+                .setParameter("providerId", provider.id().value())
+                .executeUpdate();
+        reload();
+
+        // Enabling encryption must not have bricked existing credentials.
+        assertThat(credentials.findByProvider(provider.id()).orElseThrow().partnerPassword())
+                .contains("legacy-plaintext");
     }
 
     @Test

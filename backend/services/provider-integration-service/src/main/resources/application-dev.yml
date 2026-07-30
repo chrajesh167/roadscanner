@@ -23,6 +23,8 @@ management:
 
 roadscanner:
   security:
+    credential-encryption:
+      key: ${PROVIDER_CREDENTIAL_ENCRYPTION_KEY}
     jwt:
       # auth-service's RS256 public key, from the secrets manager. Verification only.
       public-key-pem: ${JWT_PUBLIC_KEY_PEM}

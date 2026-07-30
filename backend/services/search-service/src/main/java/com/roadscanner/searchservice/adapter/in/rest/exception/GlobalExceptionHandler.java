@@ -5,6 +5,7 @@ import com.roadscanner.searchservice.domain.exception.SearchServiceException;
 import com.roadscanner.searchservice.domain.exception.TripNotFoundException;
 import com.roadscanner.searchservice.location.domain.exception.DuplicateGooglePlaceIdException;
 import com.roadscanner.searchservice.location.domain.exception.LocationNotFoundException;
+import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteRateLimitedException;
 import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -94,6 +95,16 @@ public class GlobalExceptionHandler {
         // caller can tell "you sent something wrong" from "someone already claimed this".
         log.warn("Duplicate google place id on {}: {}", request.getRequestURI(), ex.googlePlaceId());
         return respond(HttpStatus.CONFLICT, "That Google place is already mapped to another location", request);
+    }
+
+    @ExceptionHandler(PlaceAutocompleteRateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handlePlaceAutocompleteRateLimited(PlaceAutocompleteRateLimitedException ex,
+                                                                            HttpServletRequest request) {
+        // 429, not 503: this is RoadScanner declining to spend more provider quota, not the
+        // provider failing. The distinction tells a client whether backing off will actually help.
+        log.warn("Place autocomplete rate limit exceeded on {}", request.getRequestURI());
+        return respond(HttpStatus.TOO_MANY_REQUESTS, "Too many place suggestion requests — please slow down",
+                request);
     }
 
     @ExceptionHandler(PlaceAutocompleteUnavailableException.class)

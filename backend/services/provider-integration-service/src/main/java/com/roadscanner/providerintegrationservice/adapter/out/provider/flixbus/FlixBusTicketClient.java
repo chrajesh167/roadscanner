@@ -4,7 +4,6 @@ import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTicket;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -27,7 +26,6 @@ class FlixBusTicketClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "downloadTicketFallback")
-    @Retry(name = "flixbus")
     ProviderTicket downloadTicket(ProviderSession session, BookingReference bookingReference) {
         try {
             FlixBusMapper.TicketResponseDto response = restClient.get()

@@ -26,6 +26,10 @@ management:
 
 roadscanner:
   security:
+    credential-encryption:
+      # Local development only: a throwaway key generated at startup. Credentials written now
+      # cannot be read after a restart — same trade-off as the ephemeral JWT keys below.
+      ephemeral-key: true
     jwt:
       # Local development only: a throwaway verification key generated at startup. Tokens minted
       # by a separately-running auth-service will NOT be accepted. Never set in a deployed env.

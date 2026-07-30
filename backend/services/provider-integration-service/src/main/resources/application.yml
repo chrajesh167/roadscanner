@@ -55,11 +55,29 @@ info:
 # platform baseline, overridable per environment.
 roadscanner:
   security:
+    credential-encryption:
+      # Base64-encoded AES key (16/24/32 bytes) from the secrets manager. No default: a shipped
+      # default key would encrypt every deployment's secrets with a value readable from source.
+      key: ${PROVIDER_CREDENTIAL_ENCRYPTION_KEY:}
+      ephemeral-key: ${PROVIDER_CREDENTIAL_EPHEMERAL_KEY:false}
     jwt:
       # Must match auth-service's own issuer claim exactly
       # (docs/services/auth-service/security-design.md).
       issuer: roadscanner-auth-service
   provider:
+    execution:
+      # Backoff shape and pool size are platform-wide; per-provider timeout_ms and retry_count
+      # live on the provider_configurations row and are changed through the admin API.
+      backoff-initial: PT0.2S
+      backoff-multiplier: 2.0
+      # Caps any single delay — a provider configured with 5 retries must not hold a request
+      # thread for minutes.
+      backoff-max: PT2S
+      # Full jitter, so a recovering provider is not hit by synchronised retry waves.
+      backoff-jitter: true
+      # Bounded: a timed-out call keeps its worker until its socket timeout fires.
+      pool-size: 32
+      shutdown-grace: PT5S
     health-check-interval: PT30S
     session-expiry-sweep-interval: PT60S
     capabilities-cache-ttl: PT1H
@@ -86,13 +104,11 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         record-exceptions:
           - com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException
-  retry:
-    instances:
-      flixbus:
-        max-attempts: 3
-        wait-duration: PT0.5S
-        retry-exceptions:
-          - com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException
+  # Retry deliberately removed in Sprint 2.1. It now lives in the shared execution layer, which
+  # reads attempts from each provider's own retry_count column instead of one static instance —
+  # leaving this here as well would compound the two (3 x 3 = 9 attempts against a struggling
+  # provider). Circuit breaking, rate limiting and bulkheading stay: they are per-provider
+  # protections, not per-call ones, and do not overlap with the execution policy.
   ratelimiter:
     instances:
       flixbus:

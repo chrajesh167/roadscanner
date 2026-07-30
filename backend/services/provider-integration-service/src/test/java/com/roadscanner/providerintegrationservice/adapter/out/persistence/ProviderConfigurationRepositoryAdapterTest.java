@@ -3,6 +3,7 @@ package com.roadscanner.providerintegrationservice.adapter.out.persistence;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
+import com.roadscanner.providerintegrationservice.testsupport.CredentialEncryptionTestConfig;
 import com.roadscanner.providerintegrationservice.testsupport.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,8 @@ import static org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTest
 /** Exercises {@link ProviderConfigurationRepositoryAdapter} against real Postgres, including the
  * {@code V5__seed_provider_configurations.sql} seed data every environment ships with. */
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, ProviderConfigurationRepositoryAdapter.class})
+@Import({TestcontainersConfiguration.class, ProviderConfigurationRepositoryAdapter.class, CredentialEncryptionTestConfig.class,
+        EncryptedCredentialConverter.class})
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 class ProviderConfigurationRepositoryAdapterTest {
 

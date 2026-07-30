@@ -4,6 +4,7 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSessionId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
+import com.roadscanner.providerintegrationservice.testsupport.CredentialEncryptionTestConfig;
 import com.roadscanner.providerintegrationservice.testsupport.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, ProviderSessionRepositoryAdapter.class})
+@Import({TestcontainersConfiguration.class, ProviderSessionRepositoryAdapter.class, CredentialEncryptionTestConfig.class,
+        EncryptedCredentialConverter.class})
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 class ProviderSessionRepositoryAdapterTest {
 
