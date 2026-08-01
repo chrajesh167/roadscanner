@@ -58,6 +58,9 @@ class SearchControllerTest {
     @MockBean
     private SearchTrips searchTrips;
 
+    @MockBean
+    private com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips searchProviderTrips;
+
     @TestConfiguration
     static class TestConfig {
         @Bean
@@ -77,6 +80,12 @@ class SearchControllerTest {
                 new BusType("AC Sleeper", List.of("WiFi")),
                 new FareSnapshot(BigDecimal.valueOf(500), Currency.getInstance("INR")),
                 Instant.parse("2026-07-01T00:00:00Z"));
+    }
+
+    @org.junit.jupiter.api.BeforeEach
+    void federationReturnsNothingUnlessATestSaysOtherwise() {
+        when(searchProviderTrips.search(any())).thenReturn(
+                com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result.empty());
     }
 
     @Test

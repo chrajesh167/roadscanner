@@ -4,6 +4,9 @@ import com.roadscanner.searchservice.config.SearchProperties;
 import com.roadscanner.searchservice.domain.model.Route;
 import com.roadscanner.searchservice.domain.model.SearchQuery;
 import com.roadscanner.searchservice.domain.model.SortOption;
+import com.roadscanner.searchservice.location.domain.model.LocationId;
+import com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips;
+import java.util.UUID;
 import com.roadscanner.searchservice.domain.port.in.SearchTrips;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,10 +46,13 @@ class SearchController {
 
     private final SearchTrips searchTrips;
     private final SearchProperties searchProperties;
+    private final SearchProviderTrips searchProviderTrips;
 
-    SearchController(SearchTrips searchTrips, SearchProperties searchProperties) {
+    SearchController(SearchTrips searchTrips, SearchProperties searchProperties,
+                     SearchProviderTrips searchProviderTrips) {
         this.searchTrips = searchTrips;
         this.searchProperties = searchProperties;
+        this.searchProviderTrips = searchProviderTrips;
     }
 
     @GetMapping("/trips")
@@ -69,7 +75,14 @@ class SearchController {
             @RequestParam(required = false) @Min(0) @Max(5) Double minRating,
             @RequestParam(required = false) SortOption sort,
             @RequestParam(required = false) @Min(0) Integer page,
-            @RequestParam(required = false) @Min(1) Integer size
+            @RequestParam(required = false) @Min(1) Integer size,
+
+            @Parameter(description = "Canonical RoadScanner location id of the origin. Supply both "
+                    + "location ids to include live provider trips alongside the indexed results.")
+            @RequestParam(required = false) UUID originLocationId,
+
+            @Parameter(description = "Canonical RoadScanner location id of the destination.")
+            @RequestParam(required = false) UUID destinationLocationId
     ) {
         int resolvedPage = page != null ? page : 0;
         int resolvedSize = resolveSize(size);
@@ -77,7 +90,8 @@ class SearchController {
         SearchQuery query = new SearchQuery(new Route(origin, destination), date, minFare, maxFare,
                 departureAfter, departureBefore, busType, minRating, sort, resolvedPage, resolvedSize);
         SearchTrips.SearchTripsResult result = searchTrips.search(new SearchTrips.SearchTripsCommand(query));
-        return SearchResultResponse.from(result.results());
+        return SearchResultResponse.from(result.results(),
+                federate(originLocationId, destinationLocationId, date));
     }
 
     private int resolveSize(Integer requestedSize) {
@@ -87,4 +101,25 @@ class SearchController {
         }
         return Math.min(requestedSize, maxPageSize);
     }
+
+    /**
+     * Runs the provider federation when the caller supplied both canonical location ids.
+     *
+     * <p>Optional rather than required so this stays one pipeline instead of two: a caller that
+     * only knows place names gets exactly the behaviour it always had, and one that knows canonical
+     * ids gets provider trips in the same response from the same endpoint. Adding a second search
+     * API would have split the flow and left two places to keep consistent.
+     *
+     * <p>Both ids or neither: a single id identifies no route, and guessing the other end from a
+     * free-text name is exactly the silent mistranslation the mapping rules exist to prevent.
+     */
+    private SearchProviderTrips.Result federate(UUID originLocationId, UUID destinationLocationId, LocalDate date) {
+        if (originLocationId == null || destinationLocationId == null
+                || originLocationId.equals(destinationLocationId)) {
+            return SearchProviderTrips.Result.empty();
+        }
+        return searchProviderTrips.search(new SearchProviderTrips.Command(
+                new LocationId(originLocationId), new LocationId(destinationLocationId), date));
+    }
+
 }

@@ -3,27 +3,46 @@ package com.roadscanner.searchservice.location.application.usecase;
 import com.roadscanner.searchservice.domain.model.ProviderTripResult;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
 import com.roadscanner.searchservice.location.domain.model.LocationId;
-import com.roadscanner.searchservice.location.domain.model.ProviderLocationMapping;
 import com.roadscanner.searchservice.location.domain.model.ProviderCode;
+import com.roadscanner.searchservice.location.domain.model.ProviderLocationMapping;
 import com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips;
 import com.roadscanner.searchservice.location.domain.port.out.ProviderLocationMappingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Implements {@link SearchProviderTrips}: canonical location in, normalized trips out.
+ * Implements {@link SearchProviderTrips}: discover, fan out, aggregate, isolate.
  *
- * <p>This is the translation seam Sprint 1 built {@code provider_location_mapping} for. Both
- * endpoints are resolved through it before any provider call is made.
+ * <h2>Discovery</h2>
+ * Candidates are the providers holding a city mapping for <em>both</em> endpoints. Asking a
+ * provider that cannot express one end of the route wastes a call to learn nothing, and a
+ * hard-coded provider list would have to be edited every time one is onboarded — the mappings
+ * already carry that knowledge, so they are the source of truth.
  *
- * <p><strong>Never guesses and never falls back.</strong> If either location has no mapping for
- * this provider, the search is not attempted and the result reports {@code mapped=false}. Sending
- * a guessed or defaulted id would ask the provider about a place we cannot identify and present
- * whatever came back as though it were the requested route — silently wrong, and impossible to
- * spot from the outside. "This provider does not serve that route" is the correct business answer.
+ * <h2>Isolation</h2>
+ * Every provider is called inside its own guard. A timeout, a validation rejection, a rate limit
+ * or an outright bug contributes nothing and is recorded, while the others still return results.
+ * One provider having a bad day must never empty a traveller's search — that is the difference
+ * between a degraded result and a broken product.
+ *
+ * <p>The guard catches {@code RuntimeException} deliberately, not a curated list. The point is to
+ * contain <em>whatever</em> one provider's path can throw, including failures nobody anticipated;
+ * a list would isolate only the failures already thought of, which are not the ones that take a
+ * system down.
+ *
+ * <h2>Ordering</h2>
+ * Aggregated results are sorted by departure time so the list is provider-blind. Concatenating in
+ * call order would rank providers by how the fan-out happened to iterate, which is arbitrary and
+ * would quietly favour whichever provider was mapped first.
  */
 public class SearchProviderTripsService implements SearchProviderTrips {
 
@@ -40,29 +59,53 @@ public class SearchProviderTripsService implements SearchProviderTrips {
 
     @Override
     public Result search(Command command) {
-        Optional<String> originCityId = cityIdFor(command.provider(), command.origin());
-        Optional<String> destinationCityId = cityIdFor(command.provider(), command.destination());
+        Map<ProviderCode, String> origins = cityIdsByProvider(command.origin());
+        Map<ProviderCode, String> destinations = cityIdsByProvider(command.destination());
 
-        if (originCityId.isEmpty() || destinationCityId.isEmpty()) {
-            log.debug("Provider {} has no mapping for one or both endpoints — skipping provider search",
-                    command.provider());
-            return new Result(List.of(), false);
+        // Both ends, same provider. A provider mapped at only one end cannot express the route.
+        Set<ProviderCode> candidates = origins.keySet().stream()
+                .filter(destinations::containsKey)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (candidates.isEmpty()) {
+            log.debug("No provider has a city mapping for both endpoints — no provider search performed");
+            return new Result(List.of(), Set.of(), Set.of(), Set.of());
         }
 
-        List<ProviderTripResult> trips = searchClient.search(
-                command.provider(), originCityId.get(), destinationCityId.get(), command.travelDate());
+        List<ProviderTripResult> aggregated = new ArrayList<>();
+        Set<ProviderCode> succeeded = new LinkedHashSet<>();
+        Set<ProviderCode> failed = new LinkedHashSet<>();
 
-        return new Result(trips, true);
+        for (ProviderCode provider : candidates) {
+            try {
+                aggregated.addAll(searchClient.search(provider, origins.get(provider),
+                        destinations.get(provider), command.travelDate()));
+                succeeded.add(provider);
+            } catch (RuntimeException e) {
+                // Contained here so the remaining providers still run. Recorded, never silent:
+                // a partial result presented as complete is worse than a visibly partial one.
+                failed.add(provider);
+                log.warn("Provider {} failed during federated search — continuing with the others",
+                        provider, e);
+            }
+        }
+
+        aggregated.sort(Comparator.comparing(ProviderTripResult::departureTime));
+        return new Result(aggregated, candidates, succeeded, failed);
     }
 
     /**
-     * A mapping may exist while carrying only a station id — providers model geography
-     * inconsistently. Search needs a city id specifically, so a station-only mapping counts as
-     * unmapped for this purpose rather than being substituted with something that is not a city.
+     * Every provider that can name this location by city id, keyed by provider.
+     *
+     * <p>A station-only mapping is excluded: search needs a city id specifically, and substituting
+     * a station id would send a provider something that is not the thing it asked for.
      */
-    private Optional<String> cityIdFor(ProviderCode provider, LocationId locationId) {
-        return mappingRepository.findByLocationAndProvider(locationId, provider)
-                .map(ProviderLocationMapping::placeRef)
-                .map(ref -> ref.cityId());
+    private Map<ProviderCode, String> cityIdsByProvider(LocationId locationId) {
+        return mappingRepository.findByLocation(locationId).stream()
+                .filter(mapping -> mapping.placeRef().cityId() != null)
+                .collect(Collectors.toMap(ProviderLocationMapping::provider,
+                        mapping -> mapping.placeRef().cityId(),
+                        (first, second) -> first,
+                        LinkedHashMap::new));
     }
 }

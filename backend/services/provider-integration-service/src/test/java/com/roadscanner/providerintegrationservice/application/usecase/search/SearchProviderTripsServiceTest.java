@@ -58,7 +58,7 @@ class SearchProviderTripsServiceTest {
         return new ProviderTrip("TRIP-1", ProviderType.MOCK, "Mock Travels", "Mumbai", "Pune",
                 NOW.plusSeconds(3600), NOW.plusSeconds(7200), "AC Sleeper",
                 new FareAmount(BigDecimal.valueOf(500), Currency.getInstance("INR")), 10,
-                "station-a", "station-b");
+                "point-a", "point-b");
     }
 
     @Test
@@ -74,7 +74,7 @@ class SearchProviderTripsServiceTest {
     }
 
     @Test
-    void carriesTheStationIdentifiersLaterBookingWillNeed() {
+    void carriesTheBoardingIdentifiersLaterBookingWillNeed() {
         providers.add(provider(ProviderType.MOCK, true, Set.of(ProviderCapability.SEARCH)));
         client.searchResult = () -> List.of(trip());
 
@@ -83,8 +83,8 @@ class SearchProviderTripsServiceTest {
 
         // Search is the only moment a provider hands these over; dropping them here would make
         // booking impossible later without a second round trip.
-        assertThat(found.fromStationIdIfPresent()).contains("station-a");
-        assertThat(found.toStationIdIfPresent()).contains("station-b");
+        assertThat(found.boardingPointIdIfPresent()).contains("point-a");
+        assertThat(found.alightingPointIdIfPresent()).contains("point-b");
     }
 
     @Test
@@ -126,5 +126,30 @@ class SearchProviderTripsServiceTest {
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new SearchProviderTrips.Command(ProviderType.MOCK, null))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void aNonBusProviderCanBuildATripWithoutPlaceholderValues() {
+        // The test that matters for transport neutrality: a rail or airline adapter populates the
+        // same record without inventing "Bus", "Coach" or "N/A" anywhere.
+        ProviderTrip railTrip = new ProviderTrip("IC-401", ProviderType.MOCK, "National Rail",
+                "London", "Edinburgh", NOW.plusSeconds(3600), NOW.plusSeconds(20000),
+                "First Class", new FareAmount(BigDecimal.valueOf(120), Currency.getInstance("INR")), 40,
+                "KGX", "EDB");
+
+        assertThat(railTrip.serviceClassIfPresent()).contains("First Class");
+        assertThat(railTrip.boardingPointIdIfPresent()).contains("KGX");
+    }
+
+    @Test
+    void aProviderThatDoesNotClassifyItsServiceIsNotForcedToInventOne() {
+        ProviderTrip unclassified = new ProviderTrip("FERRY-9", ProviderType.MOCK, "Ferry Co",
+                "Dover", "Calais", NOW.plusSeconds(3600), NOW.plusSeconds(9000),
+                null, new FareAmount(BigDecimal.valueOf(30), Currency.getInstance("INR")), 200, null, null);
+
+        // Optional, not mandatory — making it required would recreate the original busType defect
+        // under a new name.
+        assertThat(unclassified.serviceClassIfPresent()).isEmpty();
+        assertThat(unclassified.boardingPointIdIfPresent()).isEmpty();
     }
 }

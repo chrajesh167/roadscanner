@@ -7,21 +7,25 @@ import com.roadscanner.searchservice.location.domain.model.ProviderCode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Searches a provider for trips between two canonical RoadScanner locations.
+ * Federated search across every provider that can serve a route.
  *
- * <p>The command speaks only in {@link LocationId} — the platform's canonical location identity.
- * Translating those into whatever ids the provider uses happens inside, against
- * {@code provider_location_mapping}, so no caller ever handles a provider identifier.
+ * <p>The command names no provider. Which providers are worth asking is derived from
+ * {@code provider_location_mapping}: a provider with a mapping for both endpoints can express the
+ * route, and one without cannot. That keeps provider selection data-driven — onboarding a provider
+ * makes it searchable by inserting mappings, with no code change and no list to maintain.
+ *
+ * <p>The command speaks only in {@link LocationId}, the platform's canonical location identity, so
+ * no caller ever handles a provider identifier.
  */
 public interface SearchProviderTrips {
 
     Result search(Command command);
 
-    record Command(ProviderCode provider, LocationId origin, LocationId destination, LocalDate travelDate) {
+    record Command(LocationId origin, LocationId destination, LocalDate travelDate) {
         public Command {
-            Objects.requireNonNull(provider, "provider must not be null");
             Objects.requireNonNull(origin, "origin must not be null");
             Objects.requireNonNull(destination, "destination must not be null");
             Objects.requireNonNull(travelDate, "travelDate must not be null");
@@ -32,19 +36,34 @@ public interface SearchProviderTrips {
     }
 
     /**
-     * @param mapped false when this provider has no mapping for one or both locations — a normal,
-     *               expected answer meaning "this provider does not serve that route", not a
-     *               failure. Distinguished from an empty result so a caller can tell "we never
-     *               asked" from "we asked and there was nothing".
+     * Aggregated results, plus an honest account of who answered.
+     *
+     * <p>{@code failed} is reported rather than swallowed. A result set assembled from three
+     * providers where one timed out is not the same answer as one where all three succeeded, and a
+     * caller that cannot tell them apart will present a partial result as complete.
+     *
+     * @param queried   providers asked, because they could express the route
+     * @param succeeded providers that answered, whether or not they had trips
+     * @param failed    providers that could not be reached or refused the request
      */
-    record Result(List<ProviderTripResult> trips, boolean mapped) {
+    record Result(List<ProviderTripResult> trips, Set<ProviderCode> queried, Set<ProviderCode> succeeded,
+                  Set<ProviderCode> failed) {
         public Result {
             Objects.requireNonNull(trips, "trips must not be null");
             trips = List.copyOf(trips);
+            queried = Set.copyOf(Objects.requireNonNull(queried, "queried must not be null"));
+            succeeded = Set.copyOf(Objects.requireNonNull(succeeded, "succeeded must not be null"));
+            failed = Set.copyOf(Objects.requireNonNull(failed, "failed must not be null"));
         }
 
-        static Result unmapped() {
-            return new Result(List.of(), false);
+        /** No provider search was performed — the caller supplied no canonical location ids. */
+        public static Result empty() {
+            return new Result(List.of(), Set.of(), Set.of(), Set.of());
+        }
+
+        /** True when every provider asked answered — the result set is complete as of now. */
+        public boolean complete() {
+            return failed.isEmpty();
         }
     }
 }

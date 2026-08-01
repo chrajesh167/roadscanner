@@ -45,8 +45,8 @@ class ProviderIntegrationSearchClientAdapterTest {
                   "providerTripId":"ride-1","providerType":"FLIXBUS","operatorName":"FlixBus",
                   "origin":"Hyderabad","destination":"Pune",
                   "departureTime":"2026-08-01T08:00:00Z","arrivalTime":"2026-08-01T14:00:00Z",
-                  "busType":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
-                  "fromStationId":"station-a","toStationId":"station-b"}]}""";
+                  "serviceClass":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
+                  "boardingPointId":"point-a","alightingPointId":"point-b"}]}""";
     }
 
     @Test
@@ -65,7 +65,7 @@ class ProviderIntegrationSearchClientAdapterTest {
         assertThat(trip.route().destination()).isEqualTo("Pune");
         assertThat(trip.fare().amount()).isEqualByComparingTo(BigDecimal.valueOf(899.00));
         assertThat(trip.seatsAvailable()).isEqualTo(12);
-        assertThat(trip.fromStationIdIfPresent()).contains("station-a");
+        assertThat(trip.boardingPointIdIfPresent()).contains("point-a");
         mockServer.verify();
     }
 
@@ -109,7 +109,7 @@ class ProviderIntegrationSearchClientAdapterTest {
                           "providerTripId":"ride-1","providerType":"FLIXBUS","operatorName":"FlixBus",
                           "origin":"Hyderabad","destination":"Pune",
                           "departureTime":"2026-08-01T08:00:00Z","arrivalTime":"2026-08-01T14:00:00Z",
-                          "busType":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
+                          "serviceClass":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
                           "aFieldAddedNextQuarter":{"nested":true}}],"pagination":{"page":1}}""",
                         MediaType.APPLICATION_JSON));
 

@@ -75,11 +75,11 @@ class ProviderIntegrationSearchClientAdapter implements ProviderTripSearchClient
                 dto.operatorName(),
                 new Route(dto.origin(), dto.destination()),
                 new Schedule(dto.departureTime(), dto.arrivalTime()),
-                dto.busType(),
+                dto.serviceClass(),
                 new FareSnapshot(dto.fareAmount(), Currency.getInstance(dto.fareCurrency())),
                 dto.seatsAvailable(),
-                dto.fromStationId(),
-                dto.toStationId());
+                dto.boardingPointId(),
+                dto.alightingPointId());
     }
 
     /**
@@ -92,8 +92,8 @@ class ProviderIntegrationSearchClientAdapter implements ProviderTripSearchClient
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ProviderTripDto(String providerTripId, String providerType, String operatorName, String origin,
-                           String destination, Instant departureTime, Instant arrivalTime, String busType,
+                           String destination, Instant departureTime, Instant arrivalTime, String serviceClass,
                            BigDecimal fareAmount, String fareCurrency, int seatsAvailable,
-                           String fromStationId, String toStationId) {
+                           String boardingPointId, String alightingPointId) {
     }
 }

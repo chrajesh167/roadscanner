@@ -217,11 +217,11 @@ final class MockProviderDataStore {
         private ProviderTrip toProviderTrip() {
             long available = seatStatus.values().stream().filter(status -> status == SeatStatus.AVAILABLE).count();
             FareAmount fare = seatTemplate.values().iterator().next().price();
-            // Deterministic station ids so the generic from/to station plumbing is exercised
-            // end to end against MOCK, rather than only once a real provider supplies them.
+            // Deterministic boarding/alighting ids so the generic plumbing is exercised end to
+            // end against MOCK, rather than only once a real provider supplies them.
             return new ProviderTrip(providerTripId, ProviderType.MOCK, "Mock Travels", origin, destination,
                     departureTime, arrivalTime, busType, fare, (int) available,
-                    "mock-station-" + origin, "mock-station-" + destination);
+                    "mock-point-" + origin, "mock-point-" + destination);
         }
 
         private ProviderSeatMap toSeatMap() {
