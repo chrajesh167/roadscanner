@@ -73,7 +73,7 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
             }
             return response.trips().stream()
                     .map(t -> new ExternalProviderTrip(t.providerTripId(), t.operatorName(), t.origin(), t.destination(),
-                            t.departureTime(), t.arrivalTime(), t.busType(), t.fareAmount(), t.fareCurrency(), t.seatsAvailable()))
+                            t.departureTime(), t.arrivalTime(), t.serviceClass(), t.fareAmount(), t.fareCurrency(), t.seatsAvailable()))
                     .toList();
         } catch (RestClientException e) {
             log.warn("Failed to search provider {} for trips {} -> {} on {} — degrading to no results",
@@ -159,9 +159,16 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
     private record AuthenticateProviderResponse(UUID sessionId, String providerType, Instant expiresAt) {
     }
 
+    /**
+     * provider-integration-service's wire shape. {@code serviceClass} is the provider's advertised
+     * service tier — renamed there from {@code busType} when the provider model was made
+     * transport-neutral, since a rail or airline trip has no bus type. This service maps it onto
+     * its own catalog field, whose naming belongs to the first-party model and is unchanged.
+     */
     private record ProviderTripResponse(String providerTripId, String providerType, String operatorName,
                                          String origin, String destination, Instant departureTime, Instant arrivalTime,
-                                         String busType, BigDecimal fareAmount, String fareCurrency, int seatsAvailable) {
+                                         String serviceClass, BigDecimal fareAmount, String fareCurrency,
+                                         int seatsAvailable) {
     }
 
     private record SearchTripsResponse(List<ProviderTripResponse> trips) {

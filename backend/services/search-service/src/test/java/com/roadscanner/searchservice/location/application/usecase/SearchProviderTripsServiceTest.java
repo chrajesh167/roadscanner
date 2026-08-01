@@ -191,6 +191,38 @@ class SearchProviderTripsServiceTest {
         }
 
         @Test
+        void ordersTiesDeterministicallyRatherThanByFanOutOrder() {
+            mapRoute(FLIXBUS, "58291", "41100");
+            mapRoute(REDBUS, "RB-HYD", "RB-PNQ");
+            mapRoute(ABHIBUS, "AB-HYD", "AB-PNQ");
+            // All three depart at the same instant. Sorting on departure time alone would leave
+            // the order decided by encounter order, which comes from an unordered database read —
+            // so identical requests could return identical trips in a different order, breaking
+            // pagination and result diffing.
+            client.returns(REDBUS, trip(REDBUS, "rb-1", 8));
+            client.returns(ABHIBUS, trip(ABHIBUS, "ab-1", 8));
+            client.returns(FLIXBUS, trip(FLIXBUS, "fb-1", 8));
+
+            assertThat(search().trips()).extracting(ProviderTripResult::providerTripId)
+                    .containsExactly("ab-1", "fb-1", "rb-1");
+        }
+
+        @Test
+        void repeatedIdenticalSearchesReturnTheSameOrder() {
+            mapRoute(FLIXBUS, "58291", "41100");
+            mapRoute(REDBUS, "RB-HYD", "RB-PNQ");
+            client.returns(FLIXBUS, trip(FLIXBUS, "fb-a", 8), trip(FLIXBUS, "fb-b", 8));
+            client.returns(REDBUS, trip(REDBUS, "rb-a", 8));
+
+            List<String> first = search().trips().stream().map(ProviderTripResult::providerTripId).toList();
+
+            for (int i = 0; i < 5; i++) {
+                assertThat(search().trips()).extracting(ProviderTripResult::providerTripId)
+                        .containsExactlyElementsOf(first);
+            }
+        }
+
+        @Test
         void aProviderWithNoTripsStillCountsAsSucceeded() {
             mapRoute(FLIXBUS, "58291", "41100");
             mapRoute(REDBUS, "RB-HYD", "RB-PNQ");

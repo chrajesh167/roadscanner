@@ -43,6 +43,11 @@ import java.util.stream.Collectors;
  * Aggregated results are sorted by departure time so the list is provider-blind. Concatenating in
  * call order would rank providers by how the fan-out happened to iterate, which is arbitrary and
  * would quietly favour whichever provider was mapped first.
+ *
+ * <p>The ordering is <em>total</em>: departure time, then provider code, then trip id. Sorting on
+ * departure time alone leaves ties resolved by encounter order, and encounter order derives from an
+ * unordered database read — so two identical requests could return the same trips in a different
+ * order. Pagination and result diffing both depend on that not happening.
  */
 public class SearchProviderTripsService implements SearchProviderTrips {
 
@@ -90,7 +95,13 @@ public class SearchProviderTripsService implements SearchProviderTrips {
             }
         }
 
-        aggregated.sort(Comparator.comparing(ProviderTripResult::departureTime));
+        // Total ordering, not just by departure time. List.sort is stable, so equal departure
+        // times would otherwise fall back to fan-out order — which comes from an unordered
+        // findByLocation query, making the result set differ between identical requests. Provider
+        // code then trip id breaks every tie deterministically.
+        aggregated.sort(Comparator.comparing(ProviderTripResult::departureTime)
+                .thenComparing(ProviderTripResult::providerCode)
+                .thenComparing(ProviderTripResult::providerTripId));
         return new Result(aggregated, candidates, succeeded, failed);
     }
 
