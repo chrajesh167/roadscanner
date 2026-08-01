@@ -312,4 +312,65 @@ class ProviderExecutionExecutorTest {
         assertThat(timer.count()).isEqualTo(1);
         assertThat(timer.totalTime(TimeUnit.MILLISECONDS)).isGreaterThan(100);
     }
+
+    @Test
+    void letsAnErrorPropagateRatherThanWrappingIt() {
+        // An OutOfMemoryError or similar is not a provider failure and must not be dressed up as
+        // one — wrapping it would hide a JVM-level problem behind a "provider unavailable" alert.
+        assertThatThrownBy(() -> executor.execute(policy(1, Duration.ofSeconds(2)), () -> {
+            throw new StackOverflowError("simulated");
+        })).isInstanceOf(StackOverflowError.class);
+    }
+
+    @Test
+    void surfacesAnInterruptDuringBackoffWithoutSwallowingTheFlag() throws Exception {
+        ProviderExecutionPolicy slowBackoff = new ProviderExecutionPolicy(FLIXBUS, "search",
+                Duration.ofSeconds(2), 3, attempt -> Duration.ofSeconds(30),
+                RetryStrategy.retryableFailuresOnly());
+        AtomicReference<Throwable> thrown = new AtomicReference<>();
+        AtomicReference<Boolean> interruptFlag = new AtomicReference<>();
+
+        Thread caller = new Thread(() -> {
+            try {
+                executor.execute(slowBackoff, () -> {
+                    throw retryableFailure();
+                });
+            } catch (Throwable t) {
+                thrown.set(t);
+                // Swallowing the interrupt flag would leave the pool unable to shut down cleanly.
+                interruptFlag.set(Thread.currentThread().isInterrupted());
+            }
+        });
+
+        caller.start();
+        Thread.sleep(300);
+        caller.interrupt();
+        caller.join(5_000);
+
+        assertThat(thrown.get()).isInstanceOf(ProviderUnavailableException.class);
+        assertThat(thrown.get()).hasMessageContaining("Interrupted");
+        assertThat(interruptFlag.get()).isTrue();
+    }
+
+    @Test
+    void exposesTheConfiguredExecutionProperties() {
+        var properties = new com.roadscanner.providerintegrationservice.config.ProviderExecutionProperties(
+                Duration.ofMillis(200), 2.0, Duration.ofSeconds(2), true, 32, Duration.ofSeconds(5));
+
+        assertThat(properties.backoffInitial()).isEqualTo(Duration.ofMillis(200));
+        assertThat(properties.backoffMultiplier()).isEqualTo(2.0);
+        assertThat(properties.backoffMax()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(properties.backoffJitter()).isTrue();
+        assertThat(properties.poolSize()).isEqualTo(32);
+        assertThat(properties.shutdownGrace()).isEqualTo(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void rejectsANonPositivePoolSize() {
+        // A pool of zero would deadlock every provider call rather than failing loudly.
+        assertThatThrownBy(() -> new com.roadscanner.providerintegrationservice.config.ProviderExecutionProperties(
+                Duration.ofMillis(200), 2.0, Duration.ofSeconds(2), true, 0, Duration.ofSeconds(5)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pool-size");
+    }
 }
