@@ -5,7 +5,10 @@ import com.roadscanner.searchservice.location.application.usecase.DisableLocatio
 import com.roadscanner.searchservice.location.application.usecase.GetLocationService;
 import com.roadscanner.searchservice.location.application.usecase.GetProviderMappingService;
 import com.roadscanner.searchservice.location.application.usecase.SearchLocationsService;
+import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
 import com.roadscanner.searchservice.location.application.usecase.SearchPlaceSuggestionsService;
+import com.roadscanner.searchservice.location.application.usecase.SearchProviderTripsService;
+import com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips;
 import com.roadscanner.searchservice.location.application.usecase.UpdateLocationService;
 import com.roadscanner.searchservice.location.domain.port.in.CreateLocation;
 import com.roadscanner.searchservice.location.domain.port.in.DisableLocation;
@@ -88,5 +91,16 @@ public class LocationUseCaseConfig {
                                                          PlaceAutocompleteRateLimiter rateLimiter,
                                                          LocationRepository locationRepository) {
         return new SearchPlaceSuggestionsService(placesClient, cache, rateLimiter, locationRepository);
+    }
+
+    /**
+     * Provider trip search. Takes the mapping repository so translation happens against the
+     * platform's single mapping table, and the client port so the provider call itself stays on
+     * the far side of the service boundary.
+     */
+    @Bean
+    public SearchProviderTrips searchProviderTrips(ProviderLocationMappingRepository mappingRepository,
+                                                   ProviderTripSearchClient providerTripSearchClient) {
+        return new SearchProviderTripsService(mappingRepository, providerTripSearchClient);
     }
 }

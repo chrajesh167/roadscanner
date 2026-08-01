@@ -81,7 +81,7 @@ class ProviderClientRegistryTest {
         }
 
         @Override
-        public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
+        public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
             throw new UnsupportedOperationException();
         }
 

@@ -81,9 +81,11 @@ public class ExecutionPolicyProviderClient implements ProviderClient {
     }
 
     @Override
-    public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
-        return executor.execute(retryable(resolve(session.providerType()), ProviderMetrics.OPERATION_SEARCH),
-                () -> delegate.search(session, criteria));
+    public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
+        // The caller already resolved the registry row, so no lookup is needed here — the policy
+        // reads this provider's own timeout_ms and retry_count straight off it.
+        return executor.execute(retryable(provider, ProviderMetrics.OPERATION_SEARCH),
+                () -> delegate.search(provider, criteria));
     }
 
     @Override

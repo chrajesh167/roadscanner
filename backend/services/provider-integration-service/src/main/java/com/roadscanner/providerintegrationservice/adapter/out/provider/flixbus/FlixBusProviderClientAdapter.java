@@ -69,8 +69,8 @@ class FlixBusProviderClientAdapter implements ProviderClient {
     }
 
     @Override
-    public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
-        return searchClient.search(session, criteria);
+    public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
+        return searchClient.search(provider, criteria);
     }
 
     @Override

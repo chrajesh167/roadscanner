@@ -90,7 +90,7 @@ class ExecutionPolicyProviderClientTest {
         }
 
         @Override
-        public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
+        public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
             throw retryableFailure();
         }
 
@@ -162,7 +162,7 @@ class ExecutionPolicyProviderClientTest {
 
     @Test
     void retriesSearchUsingTheProvidersConfiguredRetryCount() {
-        assertThatThrownBy(() -> client.search(session(), null))
+        assertThatThrownBy(() -> client.search(mockProvider(), null))
                 .isInstanceOf(ProviderUnavailableException.class);
 
         // retry_count 2 on the row means three attempts.
@@ -217,10 +217,12 @@ class ExecutionPolicyProviderClientTest {
 
     @Test
     void honoursAProviderConfiguredWithZeroRetries() {
-        providers.save(Provider.reconstitute(providers.findByType(ProviderType.MOCK).orElseThrow().id(),
-                ProviderType.MOCK, ProviderCategory.BUS, "Mock", true, Set.of(), null, 2_000, 0, NOW, NOW));
+        // The policy reads retry_count off the row it is handed, so a provider configured with
+        // zero retries gets exactly one attempt — no lookup, no default.
+        Provider noRetries = Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, ProviderCategory.BUS,
+                "Mock", true, Set.of(ProviderCapability.SEARCH), null, 2_000, 0, NOW, NOW);
 
-        assertThatThrownBy(() -> client.search(session(), null)).isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> client.search(noRetries, null)).isInstanceOf(RuntimeException.class);
 
         assertThat(delegate.calls()).isEqualTo(1);
     }
@@ -233,8 +235,10 @@ class ExecutionPolicyProviderClientTest {
                 BackoffStrategy.none());
 
         // Falling back to a default timeout would hide a misconfiguration behind timings nobody
-        // chose; a session for a deregistered provider is a genuine error.
-        assertThatThrownBy(() -> orphaned.search(session(), null))
+        // chose; a session for a deregistered provider is a genuine error. Asserted on a
+        // session-scoped operation, since search now receives the resolved row from its caller
+        // and so has nothing left to look up.
+        assertThatThrownBy(() -> orphaned.getSeatMap(session(), "trip-1"))
                 .isInstanceOf(ProviderNotSupportedException.class);
         assertThat(delegate.calls()).isZero();
     }

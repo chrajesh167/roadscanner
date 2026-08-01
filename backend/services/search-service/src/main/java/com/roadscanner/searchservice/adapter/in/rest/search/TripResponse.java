@@ -41,7 +41,7 @@ public record TripResponse(
         AvailabilityStatus availability = result.availability();
         return new TripResponse(
                 trip.tripId().toString(),
-                trip.operatorId().toString(),
+                trip.operatorId().map(Object::toString).orElse(null),
                 trip.operatorName(),
                 trip.route().origin(),
                 trip.route().destination(),

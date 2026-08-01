@@ -26,7 +26,10 @@ public interface IndexTripPublished {
                                       Schedule schedule, BusType busType, FareSnapshot fare, Instant occurredAt) {
         public IndexTripPublishedCommand {
             Objects.requireNonNull(tripId, "tripId must not be null");
-            Objects.requireNonNull(operatorId, "operatorId must not be null");
+            // Deliberately nullable: inventory-service is the merged, provider-agnostic catalog,
+            // and a trip it publishes from an external provider has no first-party RoadScanner
+            // operator behind it. Requiring one here rejected the message, the consumer seeked
+            // back to the same offset, and every trip queued behind it stopped being indexed.
             Objects.requireNonNull(operatorName, "operatorName must not be null");
             Objects.requireNonNull(route, "route must not be null");
             Objects.requireNonNull(schedule, "schedule must not be null");

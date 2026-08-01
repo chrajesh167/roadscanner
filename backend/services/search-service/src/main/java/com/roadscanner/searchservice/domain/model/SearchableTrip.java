@@ -37,7 +37,10 @@ public final class SearchableTrip {
                            RatingSnapshot rating, Instant createdAt, Instant lastTripEventAt,
                            Instant lastRatingEventAt) {
         this.tripId = Objects.requireNonNull(tripId, "tripId must not be null");
-        this.operatorId = Objects.requireNonNull(operatorId, "operatorId must not be null");
+        // Nullable by design. A trip sourced from an external provider has no RoadScanner
+        // operator — there is no first-party operator behind it — and fabricating an id to satisfy
+        // a non-null constraint would put a value in the read model that resolves to nothing.
+        this.operatorId = operatorId;
         this.operatorName = requireNonBlank(operatorName, "operatorName");
         this.route = Objects.requireNonNull(route, "route must not be null");
         this.schedule = Objects.requireNonNull(schedule, "schedule must not be null");
@@ -169,8 +172,9 @@ public final class SearchableTrip {
         return tripId;
     }
 
-    public OperatorId operatorId() {
-        return operatorId;
+    /** Empty for provider-sourced trips, which have no first-party RoadScanner operator. */
+    public java.util.Optional<OperatorId> operatorId() {
+        return java.util.Optional.ofNullable(operatorId);
     }
 
     public String operatorName() {

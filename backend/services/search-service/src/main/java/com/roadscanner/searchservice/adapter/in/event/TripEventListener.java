@@ -72,7 +72,11 @@ public class TripEventListener implements ConsumerSeekAware {
         switch (message.eventType()) {
             case PUBLISHED -> indexTripPublished.index(new IndexTripPublished.IndexTripPublishedCommand(
                     new TripId(message.tripId()),
-                    new OperatorId(message.operatorId()),
+                    // Null for provider-sourced trips: inventory-service publishes them with no
+                    // operatorId because no first-party operator exists. Constructing an
+                    // OperatorId here threw, the listener never advanced past the message, and the
+                    // whole index stalled behind it.
+                    message.operatorId() == null ? null : new OperatorId(message.operatorId()),
                     message.operatorName(),
                     new Route(message.origin(), message.destination()),
                     new Schedule(message.departureTime(), message.arrivalTime()),

@@ -84,7 +84,7 @@ public final class StubProviderClient implements ProviderClient {
     }
 
     @Override
-    public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
+    public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
         searchCallCount++;
         return searchResult.get();
     }

@@ -1,6 +1,6 @@
 package com.roadscanner.providerintegrationservice.adapter.out.provider.flixbus;
 
-import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
+import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTrip;
 import com.roadscanner.providerintegrationservice.domain.model.SearchCriteria;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -28,15 +28,16 @@ class FlixBusSearchClient {
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "searchFallback")
-    List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
+    // Sprint 3A only re-points this at the session-less generic signature; the request shape,
+    // endpoint and authentication are untouched and are Sprint 3B's work.
+    List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
         try {
             FlixBusMapper.TripsResponseDto response = restClient.get()
                     .uri(uriBuilder -> uriBuilder.path(SEARCH_PATH)
-                            .queryParam("origin", criteria.origin())
-                            .queryParam("destination", criteria.destination())
+                            .queryParam("origin", criteria.originCityId())
+                            .queryParam("destination", criteria.destinationCityId())
                             .queryParam("date", criteria.travelDate())
                             .build())
-                    .header("Authorization", session.token().tokenType() + " " + session.token().accessToken())
                     .retrieve()
                     .body(FlixBusMapper.TripsResponseDto.class);
             return mapper.toProviderTrips(response);
@@ -46,7 +47,7 @@ class FlixBusSearchClient {
     }
 
     @SuppressWarnings("unused")
-    private List<ProviderTrip> searchFallback(ProviderSession session, SearchCriteria criteria, Throwable t) {
+    private List<ProviderTrip> searchFallback(Provider provider, SearchCriteria criteria, Throwable t) {
         throw exceptionTranslator.translateFallback("search", t);
     }
 }

@@ -30,7 +30,7 @@ final class SearchableTripMapper {
     SearchableTrip toDomain(SearchableTripJpaEntity entity) {
         return SearchableTrip.reconstitute(
                 new TripId(entity.getTripId()),
-                new OperatorId(entity.getOperatorId()),
+                entity.getOperatorId() == null ? null : new OperatorId(entity.getOperatorId()),
                 entity.getOperatorName(),
                 new Route(entity.getOrigin(), entity.getDestination()),
                 new Schedule(entity.getDepartureTime(), entity.getArrivalTime()),
@@ -47,7 +47,7 @@ final class SearchableTripMapper {
     SearchableTripJpaEntity toNewEntity(SearchableTrip trip) {
         return new SearchableTripJpaEntity(
                 trip.tripId().value(),
-                trip.operatorId().value(),
+                trip.operatorId().map(com.roadscanner.searchservice.domain.model.OperatorId::value).orElse(null),
                 trip.operatorName(),
                 trip.route().origin(),
                 trip.route().destination(),

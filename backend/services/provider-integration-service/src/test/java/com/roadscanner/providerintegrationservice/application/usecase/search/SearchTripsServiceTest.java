@@ -13,6 +13,7 @@ import com.roadscanner.providerintegrationservice.domain.port.in.SearchTrips;
 import com.roadscanner.providerintegrationservice.domain.service.ProviderClientRegistry;
 import com.roadscanner.providerintegrationservice.testsupport.MutableClock;
 import com.roadscanner.providerintegrationservice.testsupport.fakes.InMemorySessionRepository;
+import com.roadscanner.providerintegrationservice.testsupport.fakes.InMemoryProviderConfigurationRepository;
 import com.roadscanner.providerintegrationservice.testsupport.fakes.StubProviderClient;
 import org.junit.jupiter.api.Test;
 
@@ -37,14 +38,21 @@ class SearchTripsServiceTest {
         sessionRepository.save(ProviderSession.open(sessionId, ProviderType.MOCK,
                 new ProviderToken("access", null, "Bearer", NOW.plusSeconds(3600)), NOW));
 
+        InMemoryProviderConfigurationRepository configurationRepository =
+                new InMemoryProviderConfigurationRepository();
+        configurationRepository.add(com.roadscanner.providerintegrationservice.domain.model.Provider.reconstitute(
+                com.roadscanner.providerintegrationservice.domain.model.ProviderId.generate(), ProviderType.MOCK,
+                com.roadscanner.providerintegrationservice.domain.model.ProviderCategory.BUS, "Mock", true,
+                Set.of(ProviderCapability.SEARCH), null, 5_000, 1, NOW, NOW));
+
         StubProviderClient client = new StubProviderClient(ProviderType.MOCK, Set.of(ProviderCapability.SEARCH));
         ProviderTrip trip = new ProviderTrip("TRIP-1", ProviderType.MOCK, "Mock Travels", "Mumbai", "Pune",
                 NOW.plusSeconds(3600), NOW.plusSeconds(7200), "AC Sleeper",
-                new FareAmount(BigDecimal.valueOf(500), Currency.getInstance("INR")), 10);
+                new FareAmount(BigDecimal.valueOf(500), Currency.getInstance("INR")), 10, "station-a", "station-b");
         client.searchResult = () -> List.of(trip);
 
         SearchTrips service = new SearchTripsService(new ActiveSessionResolver(sessionRepository, clock),
-                new ProviderClientRegistry(List.of(client)));
+                new ProviderClientRegistry(List.of(client)), configurationRepository);
 
         SearchTrips.Result result = service.search(new SearchTrips.Command(sessionId,
                 new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1))));

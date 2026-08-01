@@ -63,6 +63,11 @@ info:
 # Operational tuning knobs (docs/services/search-service/boundaries.md, use-cases.md). Values
 # here are the platform baseline, overridable per environment.
 roadscanner:
+  provider-integration-service:
+    base-url: ${PROVIDER_INTEGRATION_SERVICE_BASE_URL:http://localhost:8083}
+    # Larger than any single provider timeout: that service may already be retrying a slow
+    # provider, and giving up here would abandon a request that was still healthy.
+    request-timeout: PT20S
   google-places:
     # Off unless a key is supplied. GOOGLE_PLACES_API_KEY is read server-side only and is never
     # returned by any endpoint — the browser calls this service, this service calls Google.

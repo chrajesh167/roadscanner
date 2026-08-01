@@ -43,7 +43,14 @@ public interface ProviderClient {
 
     ProviderToken refreshSession(Provider provider, ProviderSession session);
 
-    List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria);
+    /**
+     * Searches the provider. Takes the {@link Provider} registry row rather than a
+     * {@link ProviderSession} because whether searching needs an authenticated session is the
+     * adapter's business — imposing one here would force a login on providers whose static
+     * partner credential is already sufficient. The adapter resolves whatever authentication it
+     * actually needs, from {@code provider_credentials} and, where relevant, its own session.
+     */
+    List<ProviderTrip> search(Provider provider, SearchCriteria criteria);
 
     ProviderSeatMap getSeatMap(ProviderSession session, String providerTripId);
 

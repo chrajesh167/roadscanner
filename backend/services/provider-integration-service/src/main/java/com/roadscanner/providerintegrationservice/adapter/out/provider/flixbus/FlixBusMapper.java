@@ -73,8 +73,12 @@ final class FlixBusMapper {
     }
 
     private ProviderTrip toProviderTrip(TripDto dto) {
+        // Station identifiers are left null: the DTO this adapter currently binds does not carry
+        // them, and inventing values a provider never sent would be worse than reporting their
+        // absence. Sprint 3B populates them from the real response shape.
         return new ProviderTrip(dto.tripId(), ProviderType.FLIXBUS, dto.operator(), dto.origin(), dto.destination(),
-                dto.departureTimeUtc(), dto.arrivalTimeUtc(), dto.busType(), toFareAmount(dto.fare()), dto.seatsAvailable());
+                dto.departureTimeUtc(), dto.arrivalTimeUtc(), dto.busType(), toFareAmount(dto.fare()),
+                dto.seatsAvailable(), null, null);
     }
 
     ProviderSeatMap toProviderSeatMap(String providerTripId, SeatMapResponseDto dto) {

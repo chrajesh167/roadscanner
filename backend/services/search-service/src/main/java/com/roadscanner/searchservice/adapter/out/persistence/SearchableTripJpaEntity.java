@@ -33,7 +33,8 @@ public class SearchableTripJpaEntity {
     @Column(name = "trip_id", nullable = false, updatable = false)
     private UUID tripId;
 
-    @Column(name = "operator_id", nullable = false, updatable = false)
+    // Nullable since V3: provider-sourced trips have no RoadScanner operator.
+    @Column(name = "operator_id", updatable = false)
     private UUID operatorId;
 
     @Column(name = "operator_name", nullable = false)

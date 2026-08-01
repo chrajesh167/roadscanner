@@ -29,6 +29,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * for why this must behave like a real provider, not a trivial stub. */
 class MockProviderClientAdapterTest {
 
+    private static final com.roadscanner.providerintegrationservice.domain.model.Provider PROVIDER =
+            com.roadscanner.providerintegrationservice.domain.model.Provider.reconstitute(
+                    com.roadscanner.providerintegrationservice.domain.model.ProviderId.generate(),
+                    com.roadscanner.providerintegrationservice.domain.model.ProviderType.MOCK,
+                    com.roadscanner.providerintegrationservice.domain.model.ProviderCategory.BUS,
+                    "Mock", true, java.util.Set.of(), null, 5_000, 1,
+                    java.time.Instant.parse("2026-07-01T00:00:00Z"),
+                    java.time.Instant.parse("2026-07-01T00:00:00Z"));
+
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-01T00:00:00Z"), ZoneOffset.UTC);
 
     private final MockProviderClientAdapter adapter = new MockProviderClientAdapter(CLOCK);

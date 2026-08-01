@@ -6,6 +6,9 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderSessionId
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTrip;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
+import com.roadscanner.providerintegrationservice.domain.model.Provider;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
 import com.roadscanner.providerintegrationservice.domain.model.SearchCriteria;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +36,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
  * have (see {@link FlixBusProperties}'s Javadoc). */
 class FlixBusSearchClientTest {
 
+    private static final Provider PROVIDER = Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS,
+            ProviderCategory.BUS, "FlixBus", true, java.util.Set.of(), "https://partner.test", 5_000, 2,
+            java.time.Instant.parse("2026-07-01T00:00:00Z"), java.time.Instant.parse("2026-07-01T00:00:00Z"));
+
     private static final String BASE_URL = "http://flixbus.test";
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-01T00:00:00Z"), ZoneOffset.UTC);
     private static final ProviderSession SESSION = ProviderSession.open(ProviderSessionId.generate(),
@@ -54,14 +61,13 @@ class FlixBusSearchClientTest {
         mockServer.expect(requestToUriTemplate(BASE_URL + "/v1/trips?origin={origin}&destination={destination}&date={date}",
                         "Mumbai", "Pune", "2026-08-01"))
                 .andExpect(method(org.springframework.http.HttpMethod.GET))
-                .andExpect(header("Authorization", "Bearer token-123"))
                 .andRespond(withSuccess("""
                         {"trips": [{"tripId": "FB-1", "operator": "FlixBus", "origin": "Mumbai", "destination": "Pune",
                         "departureTimeUtc": "2026-08-01T08:00:00Z", "arrivalTimeUtc": "2026-08-01T12:00:00Z",
                         "busType": "AC Sleeper", "fare": {"amount": 500.00, "currency": "INR"}, "seatsAvailable": 10}]}
                         """, MediaType.APPLICATION_JSON));
 
-        List<ProviderTrip> trips = client.search(SESSION, new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1)));
+        List<ProviderTrip> trips = client.search(PROVIDER, new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1)));
 
         assertThat(trips).hasSize(1);
         assertThat(trips.get(0).providerTripId()).isEqualTo("FB-1");
@@ -75,7 +81,7 @@ class FlixBusSearchClientTest {
                         "Mumbai", "Pune", "2026-08-01"))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> client.search(SESSION, new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1))))
+        assertThatThrownBy(() -> client.search(PROVIDER, new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1))))
                 .isInstanceOf(ProviderUnavailableException.class);
     }
 }

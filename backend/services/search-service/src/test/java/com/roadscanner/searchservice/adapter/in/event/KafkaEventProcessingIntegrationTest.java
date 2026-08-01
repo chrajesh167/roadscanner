@@ -1,5 +1,6 @@
 package com.roadscanner.searchservice.adapter.in.event;
 
+import com.roadscanner.searchservice.domain.model.SearchableTrip;
 import com.roadscanner.searchservice.domain.model.TripId;
 import com.roadscanner.searchservice.domain.port.out.SearchableTripRepository;
 import com.roadscanner.searchservice.testsupport.TestcontainersConfiguration;
@@ -20,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +57,10 @@ class KafkaEventProcessingIntegrationTest {
         Map<String, Object> props = Map.of(
                 org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers());
         return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(props, new StringSerializer(), new JsonSerializer<>()));
+    }
+
+    private void publish(TripEventMessage message) {
+        testProducer().send(tripEventsTopic, message.tripId().toString(), message);
     }
 
     private TripEventMessage published(UUID tripId, Instant occurredAt) {
@@ -148,5 +154,53 @@ class KafkaEventProcessingIntegrationTest {
         await().pollDelay(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(repository.findByTripId(tripId).orElseThrow().lastTripEventAt().getEpochSecond())
                         .isEqualTo(versionBefore));
+    }
+
+    @Test
+    void indexesAProviderSourcedTripThatCarriesNoOperatorId() {
+        // The bug this replaces: constructing an OperatorId from a null threw inside the listener,
+        // the consumer seeked back to the same offset, and the entire index stalled behind one
+        // message — trip search returned empty indefinitely. inventory-service publishes
+        // provider-sourced trips with no operatorId because no first-party operator exists.
+        UUID tripId = UUID.randomUUID();
+        String origin = "ProviderOrigin-" + UUID.randomUUID();
+        String destination = "ProviderDestination-" + UUID.randomUUID();
+
+        TripEventMessage providerTrip = new TripEventMessage(TripEventType.PUBLISHED, tripId, null,
+                "FlixBus", origin, destination,
+                Instant.parse("2026-08-01T08:00:00Z"), Instant.parse("2026-08-01T12:00:00Z"),
+                "AC Sleeper", List.of("WiFi"), BigDecimal.valueOf(899), "INR", Instant.now());
+
+        publish(providerTrip);
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            Optional<SearchableTrip> indexed = repository.findByTripId(new TripId(tripId));
+            assertThat(indexed).isPresent();
+            // Indexed and searchable, with the absence recorded honestly rather than papered over.
+            assertThat(indexed.orElseThrow().operatorId()).isEmpty();
+            assertThat(indexed.orElseThrow().operatorName()).isEqualTo("FlixBus");
+        });
+    }
+
+    @Test
+    void aTripWithNoOperatorDoesNotBlockTheTripsBehindIt() {
+        UUID providerTripId = UUID.randomUUID();
+        UUID firstPartyTripId = UUID.randomUUID();
+
+        publish(new TripEventMessage(TripEventType.PUBLISHED, providerTripId, null, "FlixBus",
+                "Origin-" + UUID.randomUUID(), "Destination-" + UUID.randomUUID(),
+                Instant.parse("2026-08-01T08:00:00Z"), Instant.parse("2026-08-01T12:00:00Z"),
+                "AC Sleeper", List.of(), BigDecimal.valueOf(899), "INR", Instant.now()));
+        publish(new TripEventMessage(TripEventType.PUBLISHED, firstPartyTripId, UUID.randomUUID(), "Acme Travels",
+                "Origin-" + UUID.randomUUID(), "Destination-" + UUID.randomUUID(),
+                Instant.parse("2026-08-01T09:00:00Z"), Instant.parse("2026-08-01T13:00:00Z"),
+                "Seater", List.of(), BigDecimal.valueOf(500), "INR", Instant.now()));
+
+        // The real damage of the old bug was not the one message it rejected — it was every
+        // message queued behind it on the partition.
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            assertThat(repository.findByTripId(new TripId(providerTripId))).isPresent();
+            assertThat(repository.findByTripId(new TripId(firstPartyTripId))).isPresent();
+        });
     }
 }

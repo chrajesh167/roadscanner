@@ -67,7 +67,7 @@ class MockProviderClientAdapter implements ProviderClient {
     }
 
     @Override
-    public List<ProviderTrip> search(ProviderSession session, SearchCriteria criteria) {
+    public List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
         return dataStore.search(criteria);
     }
 

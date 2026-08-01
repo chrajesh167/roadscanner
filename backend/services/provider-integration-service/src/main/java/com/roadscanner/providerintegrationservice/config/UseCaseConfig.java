@@ -44,7 +44,9 @@ import com.roadscanner.providerintegrationservice.application.usecase.registry.M
 import com.roadscanner.providerintegrationservice.application.usecase.registry.RefreshProviderSessionService;
 import com.roadscanner.providerintegrationservice.application.usecase.registry.TestProviderConnectionService;
 import com.roadscanner.providerintegrationservice.domain.port.in.ManageProviderCredentials;
+import com.roadscanner.providerintegrationservice.application.usecase.search.SearchProviderTripsService;
 import com.roadscanner.providerintegrationservice.domain.port.in.ManageProviders;
+import com.roadscanner.providerintegrationservice.domain.port.in.SearchProviderTrips;
 import com.roadscanner.providerintegrationservice.domain.port.in.RefreshProviderSession;
 import com.roadscanner.providerintegrationservice.domain.port.in.TestProviderConnection;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderCredentialsRepository;
@@ -113,8 +115,8 @@ public class UseCaseConfig {
     }
 
     @Bean
-    public SearchTrips searchTrips(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
-        return new SearchTripsService(sessionResolver, registry);
+    public SearchTrips searchTrips(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry, ProviderConfigurationRepository configurationRepository) {
+        return new SearchTripsService(sessionResolver, registry, configurationRepository);
     }
 
     @Bean
@@ -196,5 +198,16 @@ public class UseCaseConfig {
     public RefreshProviderSession refreshProviderSession(ProviderConfigurationRepository configurationRepository,
                                                          AuthenticateProvider authenticateProvider) {
         return new RefreshProviderSessionService(configurationRepository, authenticateProvider);
+    }
+
+    /**
+     * The generic, session-less provider search. Takes the registry repository so a disabled
+     * provider is refused before any call is made, and the client registry so every provider is
+     * reached through the same execution-policy-wrapped path.
+     */
+    @Bean
+    public SearchProviderTrips searchProviderTrips(ProviderConfigurationRepository configurationRepository,
+                                                   ProviderClientRegistry providerClientRegistry) {
+        return new SearchProviderTripsService(configurationRepository, providerClientRegistry);
     }
 }

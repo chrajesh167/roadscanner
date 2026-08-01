@@ -1,0 +1,132 @@
+package com.roadscanner.searchservice.adapter.out.client;
+
+import com.roadscanner.searchservice.domain.model.ProviderTripResult;
+import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
+import com.roadscanner.searchservice.location.domain.model.ProviderCode;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+/**
+ * The federation hop: provider-integration-service's canonical response becoming this service's
+ * models, and what happens when that service is unreachable.
+ */
+class ProviderIntegrationSearchClientAdapterTest {
+
+    private static final String BASE_URL = "http://provider-integration.test";
+    private static final ProviderCode FLIXBUS = new ProviderCode("FLIXBUS");
+    private static final LocalDate DATE = LocalDate.of(2026, 8, 1);
+
+    private MockRestServiceServer mockServer;
+    private ProviderTripSearchClient adapter;
+
+    @BeforeEach
+    void setUp() {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        mockServer = MockRestServiceServer.bindTo(builder).build();
+        adapter = new ProviderIntegrationSearchClientAdapter(builder.build());
+    }
+
+    private static String tripsBody() {
+        return """
+                {"trips":[{
+                  "providerTripId":"ride-1","providerType":"FLIXBUS","operatorName":"FlixBus",
+                  "origin":"Hyderabad","destination":"Pune",
+                  "departureTime":"2026-08-01T08:00:00Z","arrivalTime":"2026-08-01T14:00:00Z",
+                  "busType":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
+                  "fromStationId":"station-a","toStationId":"station-b"}]}""";
+    }
+
+    @Test
+    void normalizesTheResponseIntoRoadScannerModels() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(
+                        BASE_URL + "/internal/api/v1/providers/FLIXBUS/trips")))
+                .andRespond(withSuccess(tripsBody(), MediaType.APPLICATION_JSON));
+
+        List<ProviderTripResult> trips = adapter.search(FLIXBUS, "58291", "41100", DATE);
+
+        assertThat(trips).hasSize(1);
+        ProviderTripResult trip = trips.getFirst();
+        assertThat(trip.providerCode()).isEqualTo("FLIXBUS");
+        assertThat(trip.providerTripId()).isEqualTo("ride-1");
+        assertThat(trip.route().origin()).isEqualTo("Hyderabad");
+        assertThat(trip.route().destination()).isEqualTo("Pune");
+        assertThat(trip.fare().amount()).isEqualByComparingTo(BigDecimal.valueOf(899.00));
+        assertThat(trip.seatsAvailable()).isEqualTo(12);
+        assertThat(trip.fromStationIdIfPresent()).contains("station-a");
+        mockServer.verify();
+    }
+
+    @Test
+    void sendsTheProviderCityIdsAndDate() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(
+                        BASE_URL + "/internal/api/v1/providers/FLIXBUS/trips")))
+                .andExpect(queryParam("fromCityId", "58291"))
+                .andExpect(queryParam("toCityId", "41100"))
+                .andExpect(queryParam("departureDate", "2026-08-01"))
+                .andRespond(withSuccess("{\"trips\":[]}", MediaType.APPLICATION_JSON));
+
+        adapter.search(FLIXBUS, "58291", "41100", DATE);
+
+        mockServer.verify();
+    }
+
+    @Test
+    void degradesToAnEmptyListWhenProviderIntegrationIsUnreachable() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(withServerError());
+
+        // One provider being down must not empty a traveller's whole result set — the same
+        // "degrade, not fail" rule the availability overlay follows.
+        assertThat(adapter.search(FLIXBUS, "58291", "41100", DATE)).isEmpty();
+    }
+
+    @Test
+    void toleratesAnEmptyOrAbsentTripsArray() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThat(adapter.search(FLIXBUS, "58291", "41100", DATE)).isEmpty();
+    }
+
+    @Test
+    void ignoresFieldsProviderIntegrationMayAddLater() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(withSuccess("""
+                        {"trips":[{
+                          "providerTripId":"ride-1","providerType":"FLIXBUS","operatorName":"FlixBus",
+                          "origin":"Hyderabad","destination":"Pune",
+                          "departureTime":"2026-08-01T08:00:00Z","arrivalTime":"2026-08-01T14:00:00Z",
+                          "busType":"AC Sleeper","fareAmount":899.00,"fareCurrency":"INR","seatsAvailable":12,
+                          "aFieldAddedNextQuarter":{"nested":true}}],"pagination":{"page":1}}""",
+                        MediaType.APPLICATION_JSON));
+
+        // A field added over there must not break search for every user here.
+        assertThat(adapter.search(FLIXBUS, "58291", "41100", DATE)).hasSize(1);
+    }
+
+    @Test
+    void carriesNoProviderSpecificVocabulary() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(withSuccess(tripsBody(), MediaType.APPLICATION_JSON));
+
+        ProviderTripResult trip = adapter.search(FLIXBUS, "58291", "41100", DATE).getFirst();
+
+        // Everything crossing this boundary is a RoadScanner model. providerCode names who
+        // answered; the station ids are opaque strings this service forwards but never reads.
+        assertThat(trip).isInstanceOf(ProviderTripResult.class);
+        assertThat(trip.providerCode()).isEqualTo("FLIXBUS");
+    }
+}

@@ -167,7 +167,7 @@ final class MockProviderDataStore {
 
     private static String buildTripId(SearchCriteria criteria, MockProviderFixtures.BusConfig config) {
         return "MOCK-%s-%s-%s-%s".formatted(
-                slug(criteria.origin()), slug(criteria.destination()), criteria.travelDate(), config.suffix());
+                slug(criteria.originCityId()), slug(criteria.destinationCityId()), criteria.travelDate(), config.suffix());
     }
 
     private static String slug(String value) {
@@ -182,7 +182,7 @@ final class MockProviderDataStore {
         Instant departureTime = criteria.travelDate().atTime(DEPARTURE_TIME).atZone(ZoneOffset.UTC).toInstant();
         Instant arrivalTime = departureTime.plus(TRIP_DURATION);
         Map<String, ProviderSeat> seatTemplate = MockProviderFixtures.buildSeatTemplate(config);
-        return new TripRecord(providerTripId, criteria.origin(), criteria.destination(), departureTime, arrivalTime,
+        return new TripRecord(providerTripId, criteria.originCityId(), criteria.destinationCityId(), departureTime, arrivalTime,
                 config.seatType(), config.baseFare(), seatTemplate);
     }
 
@@ -217,8 +217,11 @@ final class MockProviderDataStore {
         private ProviderTrip toProviderTrip() {
             long available = seatStatus.values().stream().filter(status -> status == SeatStatus.AVAILABLE).count();
             FareAmount fare = seatTemplate.values().iterator().next().price();
+            // Deterministic station ids so the generic from/to station plumbing is exercised
+            // end to end against MOCK, rather than only once a real provider supplies them.
             return new ProviderTrip(providerTripId, ProviderType.MOCK, "Mock Travels", origin, destination,
-                    departureTime, arrivalTime, busType, fare, (int) available);
+                    departureTime, arrivalTime, busType, fare, (int) available,
+                    "mock-station-" + origin, "mock-station-" + destination);
         }
 
         private ProviderSeatMap toSeatMap() {
