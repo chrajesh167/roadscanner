@@ -62,16 +62,23 @@ class ProviderIntegrationServiceEndToEndTest {
         String availableSeat = seats.stream().filter(s -> "AVAILABLE".equals(s.get("status")))
                 .map(s -> (String) s.get("seatNumber")).findFirst().orElseThrow();
 
+        Map<String, Object> passenger = Map.of("firstName", "Jane", "lastName", "Doe", "birthDate", "1994-03-17",
+                "gender", "female", "seatNumber", availableSeat);
+
+        // A hold now names its occupants: providers bind a seat to the person taking it.
         ResponseEntity<Map> blockResponse = rest.postForEntity(
                 basePath("/sessions/" + sessionId + "/trips/" + providerTripId + "/seat-blocks"),
-                Map.of("seatNumbers", List.of(availableSeat)), Map.class);
+                Map.of("passengers", List.of(passenger)), Map.class);
         assertThat(blockResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String blockReference = (String) blockResponse.getBody().get("providerBlockReference");
 
-        Map<String, Object> passenger = Map.of("fullName", "Jane Doe", "age", 30, "gender", "F", "seatNumber", availableSeat);
+        // The trip is no longer sent: it is read from the stored hold, so a caller cannot confirm
+        // against a departure the seats were never held on.
         ResponseEntity<Map> confirmResponse = rest.postForEntity(
                 basePath("/sessions/" + sessionId + "/seat-blocks/" + blockReference + "/booking"),
-                Map.of("providerTripId", providerTripId, "passengers", List.of(passenger)), Map.class);
+                Map.of("contact", Map.of("phone", "+919876543210", "email", "jane@example.com",
+                                "communicationPreference", "email"),
+                        "passengers", List.of(passenger)), Map.class);
         assertThat(confirmResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         String bookingReference = (String) confirmResponse.getBody().get("bookingReference");
         assertThat(bookingReference).isNotBlank();
@@ -96,7 +103,8 @@ class ProviderIntegrationServiceEndToEndTest {
                 .orElseThrow();
         ResponseEntity<Map> blockResponse = rest.postForEntity(
                 basePath("/sessions/" + sessionId + "/trips/" + providerTripId + "/seat-blocks"),
-                Map.of("seatNumbers", List.of(availableSeat)), Map.class);
+                Map.of("passengers", List.of(Map.of("firstName", "Jane", "lastName", "Doe", "birthDate", "1994-03-17",
+                "gender", "female", "seatNumber", availableSeat))), Map.class);
         String blockReference = (String) blockResponse.getBody().get("providerBlockReference");
 
         ResponseEntity<Map> firstRelease = rest.exchange(

@@ -110,6 +110,18 @@ final class FlixBusExceptionTranslator {
     }
 
     ProviderHealthCheck translateHealthCheck(RestClientException ex) {
+        return translateHealthCheck((RuntimeException) ex);
+    }
+
+    /**
+     * Any failure means unhealthy, not just a transport failure.
+     *
+     * <p>The probe authenticates, so a rejected partner credential arrives here as an already
+     * translated {@code ProviderAuthenticationException} rather than a {@code RestClientException}.
+     * That is precisely the state the probe exists to surface — FlixBus reachable but refusing us —
+     * so it must be reported as unhealthy, never allowed to escape as a thrown exception.
+     */
+    ProviderHealthCheck translateHealthCheck(RuntimeException ex) {
         log.warn("FlixBus health check failed", ex);
         return new ProviderHealthCheck(ProviderType.FLIXBUS, HealthState.UNAVAILABLE, clock.instant(),
                 "Health probe failed: " + ex.getMessage());

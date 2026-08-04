@@ -6,6 +6,9 @@ import com.roadscanner.providerintegrationservice.domain.exception.SeatUnavailab
 import com.roadscanner.providerintegrationservice.domain.exception.TicketNotFoundException;
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
 import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
+import com.roadscanner.providerintegrationservice.domain.model.SeatAssignment;
 import com.roadscanner.providerintegrationservice.domain.model.FareAmount;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderError;
@@ -60,6 +63,10 @@ final class MockProviderDataStore {
     private final Clock clock;
     private final ConcurrentMap<String, TripRecord> trips = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ReservationRecord> reservations = new ConcurrentHashMap<>();
+
+    /** Confirmed orders, keyed by the provider order reference, so cancellation and order lookup
+     * have something to resolve — the mock exercises the same identifiers a real provider issues. */
+    private final ConcurrentMap<String, BookingConfirmation> orders = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, BookingRecord> bookings = new ConcurrentHashMap<>();
 
     MockProviderDataStore(Clock clock) {
@@ -81,7 +88,8 @@ final class MockProviderDataStore {
         return record.toSeatMap();
     }
 
-    SeatReservation block(String providerTripId, List<SeatNumber> seatNumbers) {
+    SeatReservation block(String providerTripId, List<PassengerDetail> passengers) {
+        List<SeatNumber> seatNumbers = passengers.stream().map(PassengerDetail::seatNumber).toList();
         TripRecord record = requireTrip(providerTripId);
         for (SeatNumber seatNumber : seatNumbers) {
             SeatStatus status = record.seatStatus.get(seatNumber.value());
@@ -102,7 +110,38 @@ final class MockProviderDataStore {
         reservations.put(blockReference, new ReservationRecord(providerTripId, seatNumbers, expiresAt));
 
         ReservationId reservationId = ReservationId.generate();
-        return SeatReservation.block(reservationId, blockReference, providerTripId, seatNumbers, now, expiresAt);
+        // The mock mints its own seat/ticket handles so the shape a real provider returns is
+        // exercised end to end, rather than being special-cased for the mock.
+        List<SeatAssignment> assignments = seatNumbers.stream()
+                .map(seat -> new SeatAssignment(seat, "MOCK-SEAT-" + seat.value(),
+                        "MOCK-TKT-" + UUID.randomUUID()))
+                .toList();
+        return SeatReservation.block(reservationId, ProviderType.MOCK, blockReference, providerTripId,
+                assignments, now, expiresAt);
+    }
+
+    CancellationResult cancel(String providerOrderReference, String reason) {
+        BookingConfirmation confirmation = orders.get(providerOrderReference);
+        if (confirmation == null) {
+            throw new BookingFailedException("No such order " + providerOrderReference,
+                    mockError("ORDER_NOT_FOUND", "No such order"));
+        }
+        // Refunds the full fare: the mock models no cancellation fee, and inventing one would make
+        // tests assert against a number this platform did not decide.
+        return new CancellationResult(providerOrderReference, confirmation.totalFare(), clock.instant());
+    }
+
+    ProviderOrder orderDetails(String providerOrderReference) {
+        BookingConfirmation confirmation = orders.get(providerOrderReference);
+        if (confirmation == null) {
+            throw new BookingFailedException("No such order " + providerOrderReference,
+                    mockError("ORDER_NOT_FOUND", "No such order"));
+        }
+        return new ProviderOrder(providerOrderReference, ProviderType.MOCK, java.util.Map.of(
+                "bookingReference", confirmation.bookingReference().value(),
+                "providerTripId", confirmation.providerTripId(),
+                "totalFareAmount", confirmation.totalFare().amount(),
+                "confirmedAt", confirmation.confirmedAt().toString()));
     }
 
     boolean release(String providerBlockReference) {
@@ -121,7 +160,9 @@ final class MockProviderDataStore {
         return true;
     }
 
-    BookingConfirmation confirm(String providerBlockReference, String providerTripId, List<PassengerDetail> passengers) {
+    BookingConfirmation confirm(SeatReservation held, List<PassengerDetail> passengers) {
+        String providerBlockReference = held.providerBlockReference();
+        String providerTripId = held.providerTripId();
         ReservationRecord reservation = reservations.get(providerBlockReference);
         Instant now = clock.instant();
         if (reservation == null || reservation.status != ReservationStatus.BLOCKED
@@ -137,8 +178,11 @@ final class MockProviderDataStore {
         FareAmount seatFare = trip.seatTemplate.values().iterator().next().price();
         FareAmount totalFare = new FareAmount(
                 trip.baseFare.multiply(java.math.BigDecimal.valueOf(passengers.size())), seatFare.currency());
-        BookingConfirmation confirmation = new BookingConfirmation(bookingReference, reservation.reservationId(),
-                providerTripId, passengers, totalFare, now);
+        String orderReference = "MOCK-ORD-" + UUID.randomUUID();
+        BookingConfirmation confirmation = new BookingConfirmation(bookingReference, held.reservationId(),
+                providerTripId, passengers, totalFare, "MOCK-CHK-" + UUID.randomUUID(), orderReference,
+                "MOCK-TOKEN-" + UUID.randomUUID(), now);
+        orders.put(orderReference, confirmation);
 
         byte[] ticketContent = ("MOCK TICKET\nBooking: " + bookingReference + "\nTrip: " + providerTripId + "\n"
                 + "Passengers: " + passengers.stream().map(PassengerDetail::fullName).collect(Collectors.joining(", ")))

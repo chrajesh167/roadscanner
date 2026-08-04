@@ -1,53 +1,53 @@
 package com.roadscanner.providerintegrationservice.adapter.out.provider.flixbus;
 
-import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
-import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderResponseException;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
 import com.roadscanner.providerintegrationservice.domain.model.FareAmount;
 import com.roadscanner.providerintegrationservice.domain.model.HealthState;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderHealthCheck;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSeat;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSeatMap;
-import com.roadscanner.providerintegrationservice.domain.model.ProviderTicket;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTrip;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
-import com.roadscanner.providerintegrationservice.domain.model.ReservationId;
+import com.roadscanner.providerintegrationservice.domain.model.SeatAssignment;
 import com.roadscanner.providerintegrationservice.domain.model.SeatNumber;
-import com.roadscanner.providerintegrationservice.domain.model.SeatReservation;
-import com.roadscanner.providerintegrationservice.domain.model.TicketFormat;
-import com.roadscanner.providerintegrationservice.domain.model.TicketId;
+import com.roadscanner.providerintegrationservice.domain.model.SeatStatus;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
+import java.time.format.DateTimeFormatter;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
- * Translates between RoadScanner's canonical domain model and FlixBus's own wire shapes, and is
- * the single documented reference for that wire contract — see decision #3 in
- * {@code docs/services/provider-integration-service/}: RoadScanner has no real FlixBus B2B API
- * access, so this contract is one I've defined myself (below), self-consistent and fully
- * implemented/tested against {@code MockRestServiceServer}, swappable via
- * {@link FlixBusProperties} the moment a real one is available. All JSON fields are
- * {@code lowerCamelCase}; all instants are ISO-8601 UTC; all money fields are a nested
- * {@code {amount, currency}} object.
+ * Every FlixBus wire shape, and the translation between them and RoadScanner's provider-neutral
+ * model. This is the only class that knows what FlixBus's JSON looks like.
  *
- * <pre>
- * POST   {baseUrl}/oauth/token                                  → {@link TokenResponseDto}
- * GET    {baseUrl}/v1/trips?origin=&amp;destination=&amp;date=          → {@link TripsResponseDto}
- * GET    {baseUrl}/v1/trips/{tripId}/seatmap                    → {@link SeatMapResponseDto}
- * POST   {baseUrl}/v1/trips/{tripId}/seat-blocks                → {@link BlockResponseDto}
- * DELETE {baseUrl}/v1/seat-blocks/{blockReference}               → 204 No Content
- * POST   {baseUrl}/v1/seat-blocks/{blockReference}/booking       → {@link BookingResponseDto}
- * GET    {baseUrl}/v1/bookings/{bookingReference}/ticket         → {@link TicketResponseDto}
- * GET    {baseUrl}/v1/health                                     → {@link HealthResponseDto}
- * </pre>
+ * <p>All response records are {@code ignoreUnknown}: FlixBus adding a field must never break a
+ * booking in progress.
+ *
+ * <p><strong>Naming.</strong> The DTO component names below are the literal JSON field names from
+ * the documented API, including its mixed conventions — snake_case on the public search and
+ * seat-map endpoints, camelCase on cart, checkout and payment. That inconsistency is FlixBus's, and
+ * it is reproduced rather than tidied because a record component name <em>is</em> the wire field
+ * name; renaming one for neatness silently sends a field the provider does not read.
  */
-final class FlixBusMapper {
+class FlixBusMapper {
+
+    private static final String OPERATOR_NAME = "FlixBus";
+    private static final DateTimeFormatter BIRTH_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /** The only trip type this integration books — interconnections are multi-leg. */
+    private static final String DIRECT_TRIP = "direct";
 
     private final Clock clock;
 
@@ -55,154 +55,453 @@ final class FlixBusMapper {
         this.clock = clock;
     }
 
-    ProviderToken toProviderToken(TokenResponseDto dto) {
-        Instant expiresAt = clock.instant().plusSeconds(dto.expiresInSeconds());
-        return new ProviderToken(dto.accessToken(), dto.refreshToken(), dto.tokenType(), expiresAt);
+    // ---------------------------------------------------------------- 1. partner login
+
+    ProviderToken toSessionToken(PartnerLoginResponseDto dto, Instant expiresAt) {
+        if (dto == null || dto.token() == null || dto.token().isBlank()) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "authenticate",
+                    "Login response carried no session token", null);
+        }
+        // No refresh token exists in the documented API — renewal is a fresh login.
+        return new ProviderToken(dto.token(), null, "Bearer", expiresAt);
     }
+
+    ProviderHealthCheck toHealthyCheck(long startedAtNanos) {
+        long millis = (System.nanoTime() - startedAtNanos) / 1_000_000;
+        return new ProviderHealthCheck(ProviderType.FLIXBUS, HealthState.HEALTHY, clock.instant(),
+                "Partner login succeeded in " + millis + "ms");
+    }
+
+    // ---------------------------------------------------------------- 2. trip search
 
     /**
-     * Secrets come from the encrypted credential store, never from configuration — an operator
-     * rotating a partner secret through the admin API must take effect without a redeploy.
+     * Maps a search response to provider-neutral trips.
      *
-     * <p>ASSUMPTION, inherited from an earlier sprint: the grant-type shape below. The supplied
-     * contract specifies partner login as an email/password POST to
-     * {@code /public/v1/partner/authenticate.json}; reconciling the two is Sprint 4's work, which
-     * is why nothing here was redesigned.
+     * <p>Interconnection (multi-leg) items are dropped: this integration books a single ride, and
+     * quoting a trip it cannot then book is worse than not showing it. Items whose legs are missing
+     * are dropped for the same reason — without the three UUIDs the trip is unbookable.
      */
-    TokenRequestDto toClientCredentialsRequest(FlixBusCredentials.PartnerLogin login) {
-        return new TokenRequestDto("client_credentials", login.email(), login.password(), null);
-    }
+    List<ProviderTrip> toProviderTrips(TripSearchResponseDto dto, String currencyCode) {
+        if (dto == null || dto.trips() == null) {
+            return List.of();
+        }
+        Currency currency = Currency.getInstance(currencyCode);
 
-    TokenRequestDto toRefreshTokenRequest(FlixBusCredentials.PartnerLogin login, String refreshToken) {
-        return new TokenRequestDto("refresh_token", login.email(), login.password(), refreshToken);
-    }
-
-    List<ProviderTrip> toProviderTrips(TripsResponseDto dto) {
-        return dto.trips().stream().map(this::toProviderTrip).toList();
-    }
-
-    private ProviderTrip toProviderTrip(TripDto dto) {
-        // Boarding/alighting identifiers are left null: the DTO this adapter currently binds does
-        // not carry them, and inventing values a provider never sent would be worse than reporting
-        // their absence. Sprint 3B populates them from the real response shape.
-        return new ProviderTrip(dto.tripId(), ProviderType.FLIXBUS, dto.operator(), dto.origin(), dto.destination(),
-                dto.departureTimeUtc(), dto.arrivalTimeUtc(), dto.busType(), toFareAmount(dto.fare()),
-                dto.seatsAvailable(), null, null);
-    }
-
-    ProviderSeatMap toProviderSeatMap(String providerTripId, SeatMapResponseDto dto) {
-        List<ProviderSeat> seats = dto.seats().stream().map(this::toProviderSeat).toList();
-        return new ProviderSeatMap(providerTripId, ProviderType.FLIXBUS, seats);
-    }
-
-    private ProviderSeat toProviderSeat(SeatDto dto) {
-        return new ProviderSeat(new SeatNumber(dto.seatNumber()), dto.deck(), dto.seatType(),
-                dto.status(), toFareAmount(dto.price()));
-    }
-
-    BlockRequestDto toBlockRequest(List<SeatNumber> seatNumbers) {
-        return new BlockRequestDto(seatNumbers.stream().map(SeatNumber::value).toList());
-    }
-
-    SeatReservation toSeatReservation(String providerTripId, BlockResponseDto dto, List<SeatNumber> requestedSeats) {
-        return SeatReservation.block(ReservationId.generate(), dto.blockReference(), providerTripId, requestedSeats,
-                clock.instant(), dto.expiresAtUtc());
-    }
-
-    ConfirmRequestDto toConfirmRequest(String providerTripId, List<PassengerDetail> passengers) {
-        List<PassengerDto> passengerDtos = passengers.stream()
-                .map(p -> new PassengerDto(p.fullName(), p.age(), p.gender(), p.seatNumber().value()))
+        return dto.trips().stream()
+                .filter(trip -> trip != null && trip.items() != null)
+                .flatMap(trip -> trip.items().stream()
+                        .filter(Objects::nonNull)
+                        .filter(item -> DIRECT_TRIP.equals(item.type()))
+                        .filter(item -> item.legs() != null && !item.legs().isEmpty())
+                        .map(item -> toProviderTrip(trip, item, currency))
+                        .filter(Objects::nonNull))
                 .toList();
-        return new ConfirmRequestDto(providerTripId, passengerDtos);
     }
 
-    BookingConfirmation toBookingConfirmation(ReservationId reservationId, String providerTripId,
-                                               List<PassengerDetail> passengers, BookingResponseDto dto) {
-        return new BookingConfirmation(new BookingReference(dto.bookingReference()), reservationId, providerTripId,
-                passengers, toFareAmount(dto.totalFare()), dto.confirmedAtUtc());
+    private ProviderTrip toProviderTrip(TripDto trip, TripItemDto item, Currency currency) {
+        LegDto leg = item.legs().getFirst();
+        if (leg == null || leg.ride_id() == null || leg.from_station_id() == null || leg.to_station_id() == null) {
+            return null;
+        }
+        FlixBusTripUid uid = new FlixBusTripUid(leg.ride_id(), leg.from_station_id(), leg.to_station_id());
+
+        return new ProviderTrip(
+                uid.value(),
+                ProviderType.FLIXBUS,
+                OPERATOR_NAME,
+                nameOf(trip.from()),
+                nameOf(trip.to()),
+                toInstant(item.departure()),
+                toInstant(item.arrival()),
+                // The provider's own service-tier wording ("semi-bed", "bed"). Passed through
+                // rather than mapped onto a fixed vocabulary: an unrecognised tier must still
+                // reach the traveller, not be flattened into a wrong one.
+                item.transfer_type(),
+                new FareAmount(toAmount(item.price_total_sum()), currency),
+                item.available() == null ? 0 : item.available().seats(),
+                leg.from_station_id(),
+                leg.to_station_id());
     }
 
-    ProviderTicket toProviderTicket(BookingReference bookingReference, TicketResponseDto dto) {
-        return new ProviderTicket(new TicketId(dto.ticketId()), bookingReference, dto.format(),
-                Base64.getDecoder().decode(dto.contentBase64()), dto.issuedAtUtc());
-    }
-
-    ProviderHealthCheck toHealthCheck(HealthResponseDto dto) {
-        HealthState state = "UP".equalsIgnoreCase(dto.status()) ? HealthState.HEALTHY : HealthState.UNAVAILABLE;
-        return new ProviderHealthCheck(ProviderType.FLIXBUS, state, clock.instant(), dto.message());
-    }
-
-    private FareAmount toFareAmount(MoneyDto dto) {
-        return new FareAmount(dto.amount(), Currency.getInstance(dto.currency()));
-    }
-
-    // --- Wire DTOs -----------------------------------------------------------------------
+    // ---------------------------------------------------------------- 3. seat map
 
     /**
-     * TODO(sprint-4): reconcile these field names with FlixBus's real partner-authentication
-     * schema.
+     * Maps the seat map, pricing each seat as the trip's base fare plus its category surcharge.
      *
-     * <p>{@code clientId}/{@code clientSecret} now carry the partner <em>email</em> and
-     * <em>password</em> resolved from {@code provider_credentials}, so the names no longer describe
-     * their contents. Left unchanged deliberately: a record component name is the outbound JSON
-     * field name, so renaming these would silently alter a provider-facing request body. Guessing a
-     * provider's wire contract is exactly the failure mode this sprint was scoped to avoid — the
-     * rename lands together with the real schema, verified against it, not before.
-     *
-     * <p>Only the names are stale. The values are correct and come from the encrypted store; no
-     * secret reaches this DTO from configuration.
+     * <p>The surcharge is looked up by category name; a seat whose category has no matching entry
+     * costs the base fare, which is the documented meaning of an absent surcharge rather than a
+     * reason to fail.
      */
-    record TokenRequestDto(String grantType, String clientId, String clientSecret, String refreshToken) {
-    }
-
-    record TokenResponseDto(String accessToken, String refreshToken, String tokenType, long expiresInSeconds) {
-    }
-
-    record MoneyDto(BigDecimal amount, String currency) {
-        MoneyDto {
-            Objects.requireNonNull(amount, "amount must not be null");
-            Objects.requireNonNull(currency, "currency must not be null");
+    ProviderSeatMap toProviderSeatMap(SeatMapResponseDto dto, FlixBusTripUid tripUid, BigDecimal tripBaseFare,
+                                      String currencyCode) {
+        if (dto == null) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "getSeatMap", "Empty seat-map response", null);
         }
+        Currency currency = Currency.getInstance(currencyCode);
+        BigDecimal baseFare = tripBaseFare == null ? BigDecimal.ZERO : tripBaseFare;
+
+        Map<String, BigDecimal> surcharges = dto.seat_categories() == null ? Map.of()
+                : dto.seat_categories().stream()
+                        .filter(category -> category != null && category.category() != null)
+                        .collect(java.util.stream.Collectors.toMap(SeatCategoryDto::category,
+                                category -> category.price() == null ? BigDecimal.ZERO
+                                        : toAmount(category.price().value()),
+                                (first, second) -> first));
+
+        List<ProviderSeat> seats = dto.seat_map() == null ? List.of()
+                : dto.seat_map().stream()
+                        .filter(deck -> deck != null && deck.seats() != null)
+                        .flatMap(deck -> deck.seats().stream()
+                                .filter(Objects::nonNull)
+                                .map(seat -> toProviderSeat(seat, deck.deck(), baseFare, surcharges, currency)))
+                        .toList();
+
+        return new ProviderSeatMap(tripUid.value(), ProviderType.FLIXBUS, seats);
     }
 
-    record TripDto(String tripId, String operator, String origin, String destination, Instant departureTimeUtc,
-                    Instant arrivalTimeUtc, String busType, MoneyDto fare, int seatsAvailable) {
+    private ProviderSeat toProviderSeat(SeatDto seat, Integer deck, BigDecimal baseFare,
+                                        Map<String, BigDecimal> surcharges, Currency currency) {
+        BigDecimal surcharge = surcharges.getOrDefault(seat.category(), BigDecimal.ZERO);
+        return new ProviderSeat(
+                new SeatNumber(seat.label()),
+                // Deck is an index in the payload; rendered as a name so no consumer has to know
+                // that 0 means lower. Unknown indexes keep their number rather than being guessed.
+                deck == null ? "UNKNOWN" : switch (deck) {
+                    case 0 -> "LOWER";
+                    case 1 -> "UPPER";
+                    default -> "DECK_" + deck;
+                },
+                seat.seat_type() == null ? "UNSPECIFIED" : seat.seat_type(),
+                Boolean.TRUE.equals(seat.is_available()) ? SeatStatus.AVAILABLE : SeatStatus.UNAVAILABLE,
+                new FareAmount(baseFare.add(surcharge), currency));
     }
 
-    record TripsResponseDto(List<TripDto> trips) {
-        TripsResponseDto {
-            trips = trips == null ? List.of() : List.copyOf(trips);
+    /**
+     * The per-seat provider id, keyed by the label a caller asks for.
+     *
+     * <p>Reserving a seat requires the provider's own seat id, which appears only in the seat map —
+     * there is no lookup from a label. This is how a caller's "seat 12" becomes something FlixBus
+     * will accept.
+     */
+    Map<String, String> toSeatIdsByLabel(SeatMapResponseDto dto) {
+        if (dto == null || dto.seat_map() == null) {
+            return Map.of();
         }
+        return dto.seat_map().stream()
+                .filter(deck -> deck != null && deck.seats() != null)
+                .flatMap(deck -> deck.seats().stream())
+                .filter(seat -> seat != null && seat.label() != null && seat.seat_id() != null)
+                .collect(java.util.stream.Collectors.toMap(SeatDto::label, SeatDto::seat_id,
+                        (first, second) -> first));
     }
 
-    record SeatDto(String seatNumber, String deck, String seatType,
-                    com.roadscanner.providerintegrationservice.domain.model.SeatStatus status, MoneyDto price) {
-    }
+    // ---------------------------------------------------------------- 4-6. cart
 
-    record SeatMapResponseDto(String tripId, List<SeatDto> seats) {
-        SeatMapResponseDto {
-            seats = seats == null ? List.of() : List.copyOf(seats);
+    String toCartId(CartResponseDto dto) {
+        if (dto == null || dto.id() == null || dto.id().isBlank()) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "createCart",
+                    "Cart response carried no cart id", null);
         }
+        return dto.id();
     }
 
-    record BlockRequestDto(List<String> seatNumbers) {
+    AddTicketsRequestDto toAddTicketsRequest(FlixBusTripUid tripUid, int adults, int children) {
+        return new AddTicketsRequestDto(tripUid.value(), new PassengerTypesDto(adults, children));
     }
 
-    record BlockResponseDto(String blockReference, List<String> seatNumbers, Instant expiresAtUtc) {
+    List<String> toTicketIds(CartItemsResponseDto dto) {
+        if (dto == null || dto.items() == null) {
+            return List.of();
+        }
+        return dto.items().stream()
+                .filter(item -> item != null && item.product() != null)
+                .filter(item -> "ticket".equals(item.product().type()))
+                .map(item -> item.product().id())
+                .filter(Objects::nonNull)
+                .toList();
     }
 
-    record PassengerDto(String fullName, int age, String gender, String seatNumber) {
+    SeatReservationRequestDto toSeatReservationRequest(FlixBusTripUid tripUid, List<SeatAssignment> assignments,
+                                                       List<PassengerDetail> passengers) {
+        List<ReservationDto> reservations = java.util.stream.IntStream.range(0, assignments.size())
+                .mapToObj(i -> {
+                    SeatAssignment assignment = assignments.get(i);
+                    return new ReservationDto(
+                            assignment.providerTicketId(),
+                            List.of(new ReservedSeatDto(assignment.providerSeatId(), tripUid.rideId())),
+                            passengers.get(i).gender().wireValue(),
+                            false);
+                })
+                .toList();
+        return new SeatReservationRequestDto(reservations);
     }
 
-    record ConfirmRequestDto(String tripId, List<PassengerDto> passengers) {
+    BigDecimal toReservedTotal(SeatReservationResponseDto dto) {
+        if (dto == null || dto.price() == null || dto.price().amount() == null) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "reserveSeats",
+                    "Seat reservation response carried no price", null);
+        }
+        return toAmount(dto.price().amount());
     }
 
-    record BookingResponseDto(String bookingReference, MoneyDto totalFare, Instant confirmedAtUtc) {
+    // ---------------------------------------------------------------- 7-8. checkout
+
+    CheckoutRequestDto toCheckoutRequest(String cartId, ContactDetail contact, List<String> ticketIds,
+                                         List<PassengerDetail> passengers, String defaultCallingCode) {
+        List<CheckoutPassengerDto> checkoutPassengers = java.util.stream.IntStream.range(0, ticketIds.size())
+                .mapToObj(i -> {
+                    PassengerDetail passenger = passengers.get(i);
+                    return new CheckoutPassengerDto(ticketIds.get(i), new PassengerNameDto(
+                            passenger.firstName(), passenger.lastName(),
+                            BIRTH_DATE.format(passenger.birthDate()), passenger.gender().wireValue()));
+                })
+                .toList();
+
+        return new CheckoutRequestDto(cartId,
+                new ContactDto(contact.phoneInInternationalFormat(defaultCallingCode), contact.email(),
+                        contact.communicationPreference().wireValue()),
+                checkoutPassengers);
     }
 
-    record TicketResponseDto(String ticketId, TicketFormat format, String contentBase64, Instant issuedAtUtc) {
+    String toCheckoutId(CheckoutResponseDto dto) {
+        if (dto == null || dto.id() == null || dto.id().isBlank()) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "checkout",
+                    "Checkout response carried no checkout id", null);
+        }
+        return dto.id();
     }
 
-    record HealthResponseDto(String status, String message) {
+    /**
+     * Reads a checkout, tolerating the several places the fare may appear.
+     *
+     * <p>The documented response puts the total under {@code price.total}, but the reference
+     * implementation checks four further locations. All are checked here: a fare read as zero
+     * because it sat one field over is a silent money bug, and the cost of looking is nil.
+     */
+    CheckoutDetails toCheckoutDetails(CheckoutDetailsResponseDto dto) {
+        if (dto == null) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "getCheckout",
+                    "Empty checkout-details response", null);
+        }
+        BigDecimal total = firstPresent(
+                dto.price() == null ? null : dto.price().total(),
+                dto.price() == null ? null : dto.price().value(),
+                dto.total(),
+                dto.total_price(),
+                dto.cart() == null || dto.cart().price() == null ? null : dto.cart().price().total());
+
+        String orderId = dto.order() == null ? null : dto.order().id();
+        String orderToken = dto.order() == null ? null : dto.order().token();
+        return new CheckoutDetails(total, orderId, orderToken);
+    }
+
+    // ---------------------------------------------------------------- 10-11. order
+
+    ProviderOrder toProviderOrder(String orderId, Map<String, Object> body) {
+        return new ProviderOrder(orderId, ProviderType.FLIXBUS, body == null ? Map.of() : body);
+    }
+
+    CancellationRequestDto toCancellationRequest(String reason) {
+        // Empty items = cancel the entire order, per the documented contract.
+        return new CancellationRequestDto(List.of(), "cash",
+                reason == null || reason.isBlank() ? "order cancelled by passenger request" : reason);
+    }
+
+    CancellationResult toCancellationResult(String orderId, CancellationResponseDto dto) {
+        if (dto == null || dto.refund() == null || dto.refund().amount() == null) {
+            // A cancellation without a refund figure is a failed cancellation, not a zero refund.
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "cancelBooking",
+                    "Cancellation response carried no refund amount", null);
+        }
+        return new CancellationResult(orderId,
+                new FareAmount(toAmount(dto.refund().amount()), Currency.getInstance("INR")), clock.instant());
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private static String nameOf(PlaceDto place) {
+        return place == null || place.name() == null || place.name().isBlank() ? "Unknown" : place.name();
+    }
+
+    private static Instant toInstant(TimestampDto dto) {
+        if (dto == null || dto.timestamp() == null) {
+            throw new ProviderResponseException(ProviderType.FLIXBUS, "search",
+                    "Trip carried no departure/arrival timestamp", null);
+        }
+        // Epoch seconds, per the documented payload.
+        return Instant.ofEpochSecond(dto.timestamp());
+    }
+
+    private static BigDecimal toAmount(Double value) {
+        return value == null ? BigDecimal.ZERO : BigDecimal.valueOf(value);
+    }
+
+    private static BigDecimal firstPresent(Double... candidates) {
+        return java.util.Arrays.stream(candidates)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .map(BigDecimal::valueOf)
+                .orElse(BigDecimal.ZERO);
+    }
+
+    // ---------------------------------------------------------------- wire DTOs
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PartnerLoginResponseDto(String token) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TripSearchResponseDto(List<TripDto> trips) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TripDto(PlaceDto from, PlaceDto to, List<TripItemDto> items) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PlaceDto(String id, String name) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TripItemDto(String type, String transfer_type, Double price_total_sum, AvailabilityDto available,
+                       TimestampDto departure, TimestampDto arrival, List<LegDto> legs) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record AvailabilityDto(int seats) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TimestampDto(Long timestamp) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record LegDto(String ride_id, String from_station_id, String to_station_id) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatMapResponseDto(List<SeatCategoryDto> seat_categories, List<SeatDeckDto> seat_map) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatCategoryDto(String category, SeatPriceDto price) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatPriceDto(Double value) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatDeckDto(Integer deck, List<SeatDto> seats) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatDto(String label, Boolean is_available, String category, String seat_type, String seat_id,
+                   SeatPositionDto position, List<String> allowed_genders) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatPositionDto(Integer row, Integer column) {
+    }
+
+    record CreateCartRequestDto(String currency) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CartResponseDto(String id) {
+    }
+
+    record AddTicketsRequestDto(String trip, PassengerTypesDto passengerTypes) {
+    }
+
+    record PassengerTypesDto(int adult, int children) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CartItemsResponseDto(List<CartItemDto> items) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CartItemDto(CartProductDto product) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CartProductDto(String type, String id) {
+    }
+
+    record SeatReservationRequestDto(List<ReservationDto> reservations) {
+    }
+
+    record ReservationDto(String ticket, List<ReservedSeatDto> seats, String gender, boolean extraSeat) {
+    }
+
+    record ReservedSeatDto(String id, String ride) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SeatReservationResponseDto(ReservationPriceDto price) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ReservationPriceDto(Double amount) {
+    }
+
+    record CheckoutRequestDto(String cart, ContactDto contact, List<CheckoutPassengerDto> passengers) {
+    }
+
+    record ContactDto(String phone, String email, String communicationPreference) {
+    }
+
+    record CheckoutPassengerDto(String ticket, PassengerNameDto passenger) {
+    }
+
+    record PassengerNameDto(String firstName, String lastName, String birthdate, String gender) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CheckoutResponseDto(String id) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CheckoutDetailsResponseDto(CheckoutPriceDto price, OrderRefDto order, Double total, Double total_price,
+                                      CheckoutCartDto cart) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CheckoutPriceDto(Double total, Double value) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CheckoutCartDto(CheckoutPriceDto price) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record OrderRefDto(String id, String token) {
+    }
+
+    record PaymentRequestDto(String checkoutId, String psp, String method, String externalPaymentReference) {
+    }
+
+    record CancellationRequestDto(List<String> items, String refundType, String context) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CancellationResponseDto(RefundDto refund) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record RefundDto(Double amount) {
+    }
+
+    /** A checkout read, reduced to what the booking flow acts on. */
+    record CheckoutDetails(BigDecimal total, String orderId, String orderToken) {
+
+        boolean hasOrder() {
+            return orderId != null && !orderId.isBlank();
+        }
+
+        Optional<String> orderTokenIfPresent() {
+            return Optional.ofNullable(orderToken);
+        }
     }
 }

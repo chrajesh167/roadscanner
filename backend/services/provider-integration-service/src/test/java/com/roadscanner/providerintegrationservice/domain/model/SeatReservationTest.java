@@ -14,8 +14,9 @@ class SeatReservationTest {
     private static final Instant EXPIRES_AT = BLOCKED_AT.plusSeconds(300);
 
     private SeatReservation blocked() {
-        return SeatReservation.block(ReservationId.generate(), "PROV-REF-1", "TRIP-1",
-                List.of(new SeatNumber("L1")), BLOCKED_AT, EXPIRES_AT);
+        return SeatReservation.block(ReservationId.generate(), ProviderType.MOCK, "PROV-REF-1", "TRIP-1",
+                List.of(new SeatAssignment(new SeatNumber("L1"), "seat-uuid-1", "ticket-uuid-1")),
+                BLOCKED_AT, EXPIRES_AT);
     }
 
     @Test

@@ -3,7 +3,9 @@ package com.roadscanner.providerintegrationservice.config;
 import com.roadscanner.providerintegrationservice.application.usecase.audit.AuditRecorder;
 import com.roadscanner.providerintegrationservice.application.usecase.auth.AuthenticateProviderService;
 import com.roadscanner.providerintegrationservice.application.usecase.auth.RefreshSessionService;
+import com.roadscanner.providerintegrationservice.application.usecase.booking.CancelBookingService;
 import com.roadscanner.providerintegrationservice.application.usecase.booking.ConfirmBookingService;
+import com.roadscanner.providerintegrationservice.application.usecase.booking.GetOrderDetailsService;
 import com.roadscanner.providerintegrationservice.application.usecase.capability.GetProviderCapabilitiesService;
 import com.roadscanner.providerintegrationservice.application.usecase.health.CheckProviderHealthService;
 import com.roadscanner.providerintegrationservice.application.usecase.health.ProviderHealthMonitor;
@@ -17,7 +19,9 @@ import com.roadscanner.providerintegrationservice.application.usecase.ticket.Dow
 import com.roadscanner.providerintegrationservice.domain.port.in.AuthenticateProvider;
 import com.roadscanner.providerintegrationservice.domain.port.in.BlockSeat;
 import com.roadscanner.providerintegrationservice.domain.port.in.CheckProviderHealth;
+import com.roadscanner.providerintegrationservice.domain.port.in.CancelBooking;
 import com.roadscanner.providerintegrationservice.domain.port.in.ConfirmBooking;
+import com.roadscanner.providerintegrationservice.domain.port.in.GetOrderDetails;
 import com.roadscanner.providerintegrationservice.domain.port.in.DownloadTicket;
 import com.roadscanner.providerintegrationservice.domain.port.in.GetProviderCapabilities;
 import com.roadscanner.providerintegrationservice.domain.port.in.GetSeatMap;
@@ -30,6 +34,7 @@ import com.roadscanner.providerintegrationservice.domain.port.out.ProviderCache;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderClient;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderConfigurationRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderHealthRepository;
+import com.roadscanner.providerintegrationservice.domain.port.out.ProviderReservationRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.SessionRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.TokenCache;
 import com.roadscanner.providerintegrationservice.domain.service.ProviderClientRegistry;
@@ -126,8 +131,9 @@ public class UseCaseConfig {
     }
 
     @Bean
-    public BlockSeat blockSeat(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
-        return new BlockSeatService(sessionResolver, registry);
+    public BlockSeat blockSeat(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry,
+                               ProviderReservationRepository reservationRepository) {
+        return new BlockSeatService(sessionResolver, registry, reservationRepository);
     }
 
     @Bean
@@ -136,8 +142,19 @@ public class UseCaseConfig {
     }
 
     @Bean
-    public ConfirmBooking confirmBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
-        return new ConfirmBookingService(sessionResolver, registry);
+    public ConfirmBooking confirmBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry,
+                                         ProviderReservationRepository reservationRepository) {
+        return new ConfirmBookingService(sessionResolver, registry, reservationRepository);
+    }
+
+    @Bean
+    public CancelBooking cancelBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
+        return new CancelBookingService(sessionResolver, registry);
+    }
+
+    @Bean
+    public GetOrderDetails getOrderDetails(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
+        return new GetOrderDetailsService(sessionResolver, registry);
     }
 
     @Bean

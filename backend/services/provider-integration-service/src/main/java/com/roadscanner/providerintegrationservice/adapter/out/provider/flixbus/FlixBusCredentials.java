@@ -32,6 +32,13 @@ class FlixBusCredentials {
     /** The header FlixBus expects the static partner token in, on every request. */
     static final String AUTHENTICATION_HEADER = "X-API-Authentication";
 
+    /**
+     * The header carrying the login-derived session token, required by the cart, checkout, payment,
+     * order and cancellation calls. Distinct from {@link #AUTHENTICATION_HEADER}: the partner token
+     * identifies RoadScanner, the session token authorises acting on a booking.
+     */
+    static final String SESSION_HEADER = "X-API-Session";
+
     private final ProviderCredentialsRepository credentialsRepository;
 
     FlixBusCredentials(ProviderCredentialsRepository credentialsRepository) {

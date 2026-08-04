@@ -2,6 +2,9 @@ package com.roadscanner.providerintegrationservice.domain.service;
 
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
 import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
@@ -91,7 +94,7 @@ class ProviderClientRegistryTest {
         }
 
         @Override
-        public SeatReservation blockSeats(ProviderSession session, String providerTripId, List<SeatNumber> seatNumbers) {
+        public SeatReservation blockSeats(ProviderSession session, String providerTripId, List<PassengerDetail> passengers) {
             throw new UnsupportedOperationException();
         }
 
@@ -101,8 +104,8 @@ class ProviderClientRegistryTest {
         }
 
         @Override
-        public BookingConfirmation confirmBooking(ProviderSession session, String providerBlockReference,
-                                                    String providerTripId, List<PassengerDetail> passengers) {
+        public BookingConfirmation confirmBooking(ProviderSession session, SeatReservation reservation,
+                                                  ContactDetail contact, List<PassengerDetail> passengers) {
             throw new UnsupportedOperationException();
         }
 
@@ -115,5 +118,17 @@ class ProviderClientRegistryTest {
         public ProviderHealthCheck checkHealth(Provider provider) {
             throw new UnsupportedOperationException();
         }
-    }
+    
+        @Override
+        public CancellationResult cancelBooking(ProviderSession session, String providerOrderReference,
+                                                String providerOrderToken, String reason) {
+            throw new UnsupportedOperationException("not needed by this stub");
+        }
+
+        @Override
+        public ProviderOrder getOrderDetails(ProviderSession session, String providerOrderReference,
+                                             String providerOrderToken) {
+            throw new UnsupportedOperationException("not needed by this stub");
+        }
+}
 }

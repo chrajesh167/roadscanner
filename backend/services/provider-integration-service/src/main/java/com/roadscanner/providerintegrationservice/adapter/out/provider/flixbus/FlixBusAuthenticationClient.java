@@ -1,93 +1,99 @@
 package com.roadscanner.providerintegrationservice.adapter.out.provider.flixbus;
 
-import com.roadscanner.providerintegrationservice.domain.exception.ProviderAuthenticationException;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
-import com.roadscanner.providerintegrationservice.domain.model.ProviderError;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderHealthCheck;
-import com.roadscanner.providerintegrationservice.domain.model.ProviderSession;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
-import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-/** {@code POST /oauth/token} and {@code GET /health} — see {@link FlixBusMapper}'s Javadoc for
- * the full documented contract. Resilience4j instance {@code flixbus} (application.yml). */
+import java.time.Clock;
+
+/**
+ * Endpoint 1 — {@code POST /public/v1/partner/authenticate.json}.
+ *
+ * <p>Form-encoded, not JSON: the documented contract is
+ * {@code application/x-www-form-urlencoded} with {@code email} and {@code password}, carrying the
+ * static partner token in {@code X-API-Authentication}. The response is
+ * {@code {"token": "<session_token>"}} and that token becomes {@code X-API-Session} everywhere else.
+ *
+ * <p>There is <strong>no refresh endpoint</strong> in the documented API. Renewal is a fresh login,
+ * which is why this class exposes only {@code login} — see
+ * {@link FlixBusProviderClientAdapter#refreshSession}.
+ */
 @Component
 class FlixBusAuthenticationClient {
 
-    private static final String TOKEN_PATH = "/oauth/token";
-    private static final String HEALTH_PATH = "/v1/health";
+    static final String LOGIN_PATH = "/public/v1/partner/authenticate.json";
 
     private final RestClient restClient;
     private final FlixBusMapper mapper;
     private final FlixBusExceptionTranslator exceptionTranslator;
     private final FlixBusCredentials credentials;
+    private final FlixBusProperties properties;
+    private final Clock clock;
 
     FlixBusAuthenticationClient(RestClient flixBusRestClient, FlixBusMapper mapper,
-                                 FlixBusExceptionTranslator exceptionTranslator, FlixBusCredentials credentials) {
+                                FlixBusExceptionTranslator exceptionTranslator, FlixBusCredentials credentials,
+                                FlixBusProperties properties, Clock clock) {
         this.restClient = flixBusRestClient;
         this.mapper = mapper;
         this.exceptionTranslator = exceptionTranslator;
         this.credentials = credentials;
+        this.properties = properties;
+        this.clock = clock;
     }
 
-    @CircuitBreaker(name = "flixbus", fallbackMethod = "authenticateFallback")
-    ProviderToken authenticate(Provider provider) {
+    @CircuitBreaker(name = "flixbus", fallbackMethod = "loginFallback")
+    ProviderToken login(Provider provider) {
+        FlixBusCredentials.PartnerLogin partnerLogin = credentials.partnerLogin(provider);
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("email", partnerLogin.email());
+        form.add("password", partnerLogin.password());
+
         try {
-            FlixBusMapper.TokenResponseDto response = restClient.post()
-                    .uri(TOKEN_PATH)
-                    .body(mapper.toClientCredentialsRequest(credentials.partnerLogin(provider)))
+            FlixBusMapper.PartnerLoginResponseDto response = restClient.post()
+                    .uri(LOGIN_PATH)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .header(FlixBusCredentials.AUTHENTICATION_HEADER, credentials.partnerToken(provider))
+                    .body(form)
                     .retrieve()
-                    .body(FlixBusMapper.TokenResponseDto.class);
-            return mapper.toProviderToken(response);
+                    .body(FlixBusMapper.PartnerLoginResponseDto.class);
+
+            return mapper.toSessionToken(response, clock.instant().plus(properties.sessionTtl()));
         } catch (RestClientException e) {
             throw exceptionTranslator.translateAuthentication(e);
         }
     }
 
     @SuppressWarnings("unused")
-    private ProviderToken authenticateFallback(Provider provider, Throwable t) {
+    private ProviderToken loginFallback(Provider provider, Throwable t) {
         throw exceptionTranslator.translateFallback("authenticate", t);
     }
 
-    @CircuitBreaker(name = "flixbus", fallbackMethod = "refreshFallback")
-    ProviderToken refresh(Provider provider, ProviderSession session) {
+    /**
+     * Health probe by partner login.
+     *
+     * <p>The documented API exposes no health endpoint, and inventing one would mean calling a URL
+     * FlixBus never published. Login is the honest substitute: it is documented, cheap, and it
+     * exercises exactly what a caller needs to be true — FlixBus is reachable and our stored
+     * credentials are still accepted. A probe against a bare ping would report healthy while every
+     * booking failed on a revoked partner secret.
+     *
+     * <p>No resilience annotations: a probe exists to observe current state, so it must never be
+     * short-circuited by an open breaker. It degrades to {@code UNAVAILABLE} rather than throwing.
+     */
+    ProviderHealthCheck checkHealth(Provider provider) {
+        long startedAt = System.nanoTime();
         try {
-            String refreshToken = session.token().refreshTokenIfPresent()
-                    .orElseThrow(() -> new ProviderAuthenticationException(
-                            "FlixBus session has no refresh token; re-authenticate instead",
-                            new ProviderError(ProviderType.FLIXBUS, "NO_REFRESH_TOKEN",
-                                    "Session has no refresh token", false)));
-            FlixBusMapper.TokenResponseDto response = restClient.post()
-                    .uri(TOKEN_PATH)
-                    .body(mapper.toRefreshTokenRequest(credentials.partnerLogin(provider), refreshToken))
-                    .retrieve()
-                    .body(FlixBusMapper.TokenResponseDto.class);
-            return mapper.toProviderToken(response);
-        } catch (RestClientException e) {
-            throw exceptionTranslator.translateAuthentication(e);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private ProviderToken refreshFallback(Provider provider, ProviderSession session, Throwable t) {
-        throw exceptionTranslator.translateFallback("refreshSession", t);
-    }
-
-    /** No resilience annotations — a health probe's whole purpose is to observe the provider's
-     * current state, so it must never be short-circuited by an open breaker; it degrades to an
-     * {@code UNAVAILABLE} result on any failure instead of throwing (see
-     * {@link FlixBusExceptionTranslator#translateHealthCheck}). */
-    ProviderHealthCheck checkHealth() {
-        try {
-            FlixBusMapper.HealthResponseDto response = restClient.get()
-                    .uri(HEALTH_PATH)
-                    .retrieve()
-                    .body(FlixBusMapper.HealthResponseDto.class);
-            return mapper.toHealthCheck(response);
-        } catch (RestClientException e) {
+            login(provider);
+            return mapper.toHealthyCheck(startedAt);
+        } catch (RuntimeException e) {
             return exceptionTranslator.translateHealthCheck(e);
         }
     }

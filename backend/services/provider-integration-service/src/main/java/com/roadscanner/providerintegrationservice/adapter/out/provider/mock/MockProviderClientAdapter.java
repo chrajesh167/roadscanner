@@ -2,6 +2,9 @@ package com.roadscanner.providerintegrationservice.adapter.out.provider.mock;
 
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
 import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
 import com.roadscanner.providerintegrationservice.domain.model.HealthState;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
@@ -53,7 +56,7 @@ class MockProviderClientAdapter implements ProviderClient {
 
     @Override
     public Set<ProviderCapability> supportedCapabilities() {
-        return Set.of(ProviderCapability.values());
+        return Set.of(ProviderCapability.values());  // the mock deliberately supports everything
     }
 
     @Override
@@ -77,8 +80,9 @@ class MockProviderClientAdapter implements ProviderClient {
     }
 
     @Override
-    public SeatReservation blockSeats(ProviderSession session, String providerTripId, List<SeatNumber> seatNumbers) {
-        return dataStore.block(providerTripId, seatNumbers);
+    public SeatReservation blockSeats(ProviderSession session, String providerTripId,
+                                      List<PassengerDetail> passengers) {
+        return dataStore.block(providerTripId, passengers);
     }
 
     @Override
@@ -87,9 +91,21 @@ class MockProviderClientAdapter implements ProviderClient {
     }
 
     @Override
-    public BookingConfirmation confirmBooking(ProviderSession session, String providerBlockReference,
-                                               String providerTripId, List<PassengerDetail> passengers) {
-        return dataStore.confirm(providerBlockReference, providerTripId, passengers);
+    public BookingConfirmation confirmBooking(ProviderSession session, SeatReservation reservation,
+                                               ContactDetail contact, List<PassengerDetail> passengers) {
+        return dataStore.confirm(reservation, passengers);
+    }
+
+    @Override
+    public CancellationResult cancelBooking(ProviderSession session, String providerOrderReference,
+                                            String providerOrderToken, String reason) {
+        return dataStore.cancel(providerOrderReference, reason);
+    }
+
+    @Override
+    public ProviderOrder getOrderDetails(ProviderSession session, String providerOrderReference,
+                                         String providerOrderToken) {
+        return dataStore.orderDetails(providerOrderReference);
     }
 
     @Override

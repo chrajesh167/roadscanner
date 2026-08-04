@@ -1,7 +1,6 @@
 package com.roadscanner.providerintegrationservice.adapter.in.rest.seatblock;
 
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSessionId;
-import com.roadscanner.providerintegrationservice.domain.model.SeatNumber;
 import com.roadscanner.providerintegrationservice.domain.port.in.BlockSeat;
 import com.roadscanner.providerintegrationservice.domain.port.in.ReleaseSeat;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,7 +37,9 @@ class ProviderSeatBlockController {
     SeatReservationResponse block(@PathVariable String providerType, @PathVariable UUID sessionId,
                                    @PathVariable String providerTripId, @Valid @RequestBody BlockSeatRequest request) {
         BlockSeat.Result result = blockSeat.block(new BlockSeat.Command(new ProviderSessionId(sessionId), providerTripId,
-                request.seatNumbers().stream().map(SeatNumber::new).toList()));
+                request.passengers().stream()
+                        .map(com.roadscanner.providerintegrationservice.adapter.in.rest.booking.BlockPassengerRequest::toDomain)
+                        .toList()));
         return SeatReservationResponse.from(result.reservation());
     }
 

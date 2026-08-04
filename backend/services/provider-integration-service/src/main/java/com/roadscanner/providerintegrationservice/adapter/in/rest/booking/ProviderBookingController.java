@@ -34,7 +34,7 @@ class ProviderBookingController {
                                          @Valid @RequestBody ConfirmBookingRequest request) {
         List<PassengerDetail> passengers = request.passengers().stream().map(PassengerRequest::toDomain).toList();
         ConfirmBooking.Result result = confirmBooking.confirm(new ConfirmBooking.Command(
-                new ProviderSessionId(sessionId), providerBlockReference, request.providerTripId(), passengers));
+                new ProviderSessionId(sessionId), providerBlockReference, request.contact().toDomain(), passengers));
         return BookingConfirmationResponse.from(result.confirmation());
     }
 }

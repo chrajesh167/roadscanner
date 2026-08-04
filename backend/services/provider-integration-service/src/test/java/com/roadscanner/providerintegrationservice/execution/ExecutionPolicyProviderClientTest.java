@@ -4,6 +4,11 @@ import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSu
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
 import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
+import com.roadscanner.providerintegrationservice.domain.model.ReservationId;
+import com.roadscanner.providerintegrationservice.domain.model.SeatAssignment;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
@@ -101,7 +106,7 @@ class ExecutionPolicyProviderClientTest {
 
         @Override
         public SeatReservation blockSeats(ProviderSession session, String providerTripId,
-                                          List<SeatNumber> seatNumbers) {
+                                          List<PassengerDetail> passengers) {
             throw retryableFailure();
         }
 
@@ -111,10 +116,23 @@ class ExecutionPolicyProviderClientTest {
         }
 
         @Override
-        public BookingConfirmation confirmBooking(ProviderSession session, String providerBlockReference,
-                                                  String providerTripId, List<PassengerDetail> passengers) {
+        public BookingConfirmation confirmBooking(ProviderSession session, SeatReservation reservation,
+                                                  ContactDetail contact, List<PassengerDetail> passengers) {
             throw retryableFailure();
         }
+
+        @Override
+        public CancellationResult cancelBooking(ProviderSession session, String providerOrderReference,
+                                                String providerOrderToken, String reason) {
+            throw retryableFailure();
+        }
+
+        @Override
+        public ProviderOrder getOrderDetails(ProviderSession session, String providerOrderReference,
+                                             String providerOrderToken) {
+            throw retryableFailure();
+        }
+
 
         @Override
         public ProviderTicket downloadTicket(ProviderSession session, BookingReference bookingReference) {
@@ -130,6 +148,17 @@ class ExecutionPolicyProviderClientTest {
     private static Provider mockProvider() {
         return Provider.reconstitute(ProviderId.generate(), ProviderType.MOCK, ProviderCategory.BUS, "Mock", true,
                 Set.of(ProviderCapability.SEARCH), null, 2_000, 2, NOW, NOW);
+    }
+
+    private static ContactDetail contact() {
+        return new ContactDetail("+919876543210", "traveller@example.com",
+                ContactDetail.CommunicationPreference.EMAIL);
+    }
+
+    private static SeatReservation reservation() {
+        return SeatReservation.block(ReservationId.generate(), ProviderType.MOCK, "block-1", "trip-1",
+                List.of(new SeatAssignment(new SeatNumber("1A"), "seat-uuid", "ticket-uuid")), NOW,
+                NOW.plusSeconds(600));
     }
 
     private static ProviderSession session() {
@@ -183,7 +212,7 @@ class ExecutionPolicyProviderClientTest {
 
     @Test
     void neverRetriesBookingConfirmation() {
-        assertThatThrownBy(() -> client.confirmBooking(session(), "block-1", "trip-1", List.of()))
+        assertThatThrownBy(() -> client.confirmBooking(session(), reservation(), contact(), List.of()))
                 .isInstanceOf(ProviderUnavailableException.class);
 
         // A timed-out confirmation may already have booked. Retrying is how you double-book.

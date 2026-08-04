@@ -5,6 +5,10 @@ import com.roadscanner.providerintegrationservice.domain.exception.ProviderTripN
 import com.roadscanner.providerintegrationservice.domain.exception.SeatUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.exception.TicketNotFoundException;
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
+import com.roadscanner.providerintegrationservice.domain.model.ReservationId;
+import com.roadscanner.providerintegrationservice.domain.model.SeatAssignment;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSeat;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSeatMap;
@@ -43,6 +47,16 @@ class MockProviderClientAdapterTest {
     private final MockProviderClientAdapter adapter = new MockProviderClientAdapter(CLOCK);
     private final SearchCriteria criteria = new SearchCriteria("Mumbai", "Pune", LocalDate.of(2026, 8, 1));
 
+    private static PassengerDetail passenger(SeatNumber seat) {
+        return new PassengerDetail("Jane", "Doe", java.time.LocalDate.of(1994, 3, 17),
+                PassengerDetail.Gender.FEMALE, seat);
+    }
+
+    private static ContactDetail contact() {
+        return new ContactDetail("+919876543210", "jane@example.com",
+                ContactDetail.CommunicationPreference.EMAIL);
+    }
+
     @Test
     void fullHappyPathFromSearchToTicket() {
         List<ProviderTrip> trips = adapter.search(null, criteria);
@@ -53,12 +67,11 @@ class MockProviderClientAdapterTest {
         SeatNumber availableSeat = seatMap.seats().stream().filter(ProviderSeat::isAvailable).findFirst()
                 .orElseThrow().seatNumber();
 
-        SeatReservation reservation = adapter.blockSeats(null, providerTripId, List.of(availableSeat));
+        List<PassengerDetail> passengers = List.of(passenger(availableSeat));
+        SeatReservation reservation = adapter.blockSeats(null, providerTripId, passengers);
         assertThat(reservation.seatNumbers()).containsExactly(availableSeat);
 
-        List<PassengerDetail> passengers = List.of(new PassengerDetail("Jane Doe", 30, "F", availableSeat));
-        BookingConfirmation confirmation = adapter.confirmBooking(null, reservation.providerBlockReference(),
-                providerTripId, passengers);
+        BookingConfirmation confirmation = adapter.confirmBooking(null, reservation, contact(), passengers);
         assertThat(confirmation.passengers()).isEqualTo(passengers);
 
         ProviderTicket ticket = adapter.downloadTicket(null, confirmation.bookingReference());
@@ -80,7 +93,7 @@ class MockProviderClientAdapterTest {
         String providerTripId = adapter.search(null, criteria).get(0).providerTripId();
         ProviderSeatMap seatMap = adapter.getSeatMap(null, providerTripId);
         SeatNumber seat = seatMap.seats().stream().filter(ProviderSeat::isAvailable).findFirst().orElseThrow().seatNumber();
-        SeatReservation reservation = adapter.blockSeats(null, providerTripId, List.of(seat));
+        SeatReservation reservation = adapter.blockSeats(null, providerTripId, List.of(passenger(seat)));
 
         adapter.releaseSeats(null, reservation.providerBlockReference());
         adapter.releaseSeats(null, reservation.providerBlockReference()); // no exception on repeat
@@ -97,7 +110,7 @@ class MockProviderClientAdapterTest {
         SeatNumber unavailableSeat = seatMap.seats().stream().filter(s -> !s.isAvailable()).findFirst().orElseThrow()
                 .seatNumber();
 
-        assertThatThrownBy(() -> adapter.blockSeats(null, providerTripId, List.of(unavailableSeat)))
+        assertThatThrownBy(() -> adapter.blockSeats(null, providerTripId, List.of(passenger(unavailableSeat))))
                 .isInstanceOf(SeatUnavailableException.class);
     }
 
@@ -105,8 +118,13 @@ class MockProviderClientAdapterTest {
     void confirmingAnUnknownBlockReferenceThrowsBookingFailed() {
         String providerTripId = adapter.search(null, criteria).get(0).providerTripId();
 
-        assertThatThrownBy(() -> adapter.confirmBooking(null, "MOCK-BLK-does-not-exist", providerTripId,
-                List.of(new PassengerDetail("Jane Doe", 30, "F", new SeatNumber("L1")))))
+        SeatReservation unknown = SeatReservation.block(ReservationId.generate(), ProviderType.MOCK,
+                "MOCK-BLK-does-not-exist", providerTripId,
+                List.of(new SeatAssignment(new SeatNumber("L1"), "seat-x", "ticket-x")),
+                java.time.Instant.now(), java.time.Instant.now().plusSeconds(600));
+
+        assertThatThrownBy(() -> adapter.confirmBooking(null, unknown, contact(),
+                List.of(passenger(new SeatNumber("L1")))))
                 .isInstanceOf(BookingFailedException.class);
     }
 

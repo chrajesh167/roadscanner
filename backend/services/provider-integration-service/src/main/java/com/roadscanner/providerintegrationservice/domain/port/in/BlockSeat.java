@@ -1,7 +1,7 @@
 package com.roadscanner.providerintegrationservice.domain.port.in;
 
 import com.roadscanner.providerintegrationservice.domain.model.ProviderSessionId;
-import com.roadscanner.providerintegrationservice.domain.model.SeatNumber;
+import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.SeatReservation;
 
 import java.util.List;
@@ -14,16 +14,21 @@ public interface BlockSeat {
 
     Result block(Command command);
 
-    record Command(ProviderSessionId sessionId, String providerTripId, List<SeatNumber> seatNumbers) {
+    /**
+     * Passengers rather than bare seat numbers: a hold binds a seat to the person taking it, and
+     * providers need the occupant to honour gender-restricted seats. The seat is carried on each
+     * passenger, so no parallel list can fall out of step.
+     */
+    record Command(ProviderSessionId sessionId, String providerTripId, List<PassengerDetail> passengers) {
         public Command {
             Objects.requireNonNull(sessionId, "sessionId must not be null");
             if (providerTripId == null || providerTripId.isBlank()) {
                 throw new IllegalArgumentException("providerTripId must not be blank");
             }
-            if (seatNumbers == null || seatNumbers.isEmpty()) {
-                throw new IllegalArgumentException("seatNumbers must not be empty");
+            if (passengers == null || passengers.isEmpty()) {
+                throw new IllegalArgumentException("passengers must not be empty");
             }
-            seatNumbers = List.copyOf(seatNumbers);
+            passengers = List.copyOf(passengers);
         }
     }
 

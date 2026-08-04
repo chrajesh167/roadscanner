@@ -3,6 +3,9 @@ package com.roadscanner.providerintegrationservice.execution;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.model.BookingConfirmation;
 import com.roadscanner.providerintegrationservice.domain.model.BookingReference;
+import com.roadscanner.providerintegrationservice.domain.model.CancellationResult;
+import com.roadscanner.providerintegrationservice.domain.model.ContactDetail;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderOrder;
 import com.roadscanner.providerintegrationservice.domain.model.PassengerDetail;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCapability;
@@ -14,7 +17,6 @@ import com.roadscanner.providerintegrationservice.domain.model.ProviderToken;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderTrip;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import com.roadscanner.providerintegrationservice.domain.model.SearchCriteria;
-import com.roadscanner.providerintegrationservice.domain.model.SeatNumber;
 import com.roadscanner.providerintegrationservice.domain.model.SeatReservation;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderClient;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderConfigurationRepository;
@@ -95,11 +97,12 @@ public class ExecutionPolicyProviderClient implements ProviderClient {
     }
 
     @Override
-    public SeatReservation blockSeats(ProviderSession session, String providerTripId, List<SeatNumber> seatNumbers) {
+    public SeatReservation blockSeats(ProviderSession session, String providerTripId,
+                                      List<PassengerDetail> passengers) {
         // Single attempt: a timed-out block may already hold the seats.
         return executor.execute(
                 ProviderExecutionPolicy.nonIdempotent(resolve(session.providerType()), "blockSeats"),
-                () -> delegate.blockSeats(session, providerTripId, seatNumbers));
+                () -> delegate.blockSeats(session, providerTripId, passengers));
     }
 
     @Override
@@ -113,12 +116,30 @@ public class ExecutionPolicyProviderClient implements ProviderClient {
     }
 
     @Override
-    public BookingConfirmation confirmBooking(ProviderSession session, String providerBlockReference,
-                                              String providerTripId, List<PassengerDetail> passengers) {
+    public BookingConfirmation confirmBooking(ProviderSession session, SeatReservation reservation,
+                                              ContactDetail contact, List<PassengerDetail> passengers) {
         // Single attempt: retrying a timed-out confirmation is how you double-book someone.
         return executor.execute(
                 ProviderExecutionPolicy.nonIdempotent(resolve(session.providerType()), "confirmBooking"),
-                () -> delegate.confirmBooking(session, providerBlockReference, providerTripId, passengers));
+                () -> delegate.confirmBooking(session, reservation, contact, passengers));
+    }
+
+    @Override
+    public CancellationResult cancelBooking(ProviderSession session, String providerOrderReference,
+                                            String providerOrderToken, String reason) {
+        // Single attempt: a timed-out cancellation may already have refunded, and repeating it is
+        // how a traveller is refunded twice. Same reasoning as confirmation, opposite direction.
+        return executor.execute(
+                ProviderExecutionPolicy.nonIdempotent(resolve(session.providerType()), "cancelBooking"),
+                () -> delegate.cancelBooking(session, providerOrderReference, providerOrderToken, reason));
+    }
+
+    @Override
+    public ProviderOrder getOrderDetails(ProviderSession session, String providerOrderReference,
+                                         String providerOrderToken) {
+        // A pure read — safe to retry.
+        return executor.execute(retryable(resolve(session.providerType()), "getOrderDetails"),
+                () -> delegate.getOrderDetails(session, providerOrderReference, providerOrderToken));
     }
 
     @Override
