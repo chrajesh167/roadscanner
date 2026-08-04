@@ -20,9 +20,22 @@ import java.util.List;
 public interface ProviderTripSearchClient {
 
     /**
-     * @return normalized trips, best-effort. Returns empty rather than throwing when the provider
-     *         is unreachable: a provider outage must degrade the result set, never fail the whole
-     *         search — the same "degrade, not fail" rule the availability overlay already follows.
+     * Searches one provider.
+     *
+     * <p><strong>Throws when the provider could not be searched.</strong> Degradation is the
+     * caller's job, not this port's: {@code SearchProviderTripsService} already catches per
+     * provider, records the failure and continues with the others, so an outage still degrades the
+     * result set rather than failing the search.
+     *
+     * <p>This port previously promised to return empty rather than throw. That made a failure
+     * indistinguishable from a provider with no trips on the route, and left the federation unable
+     * to report a partial answer as partial — both layers degraded, and the signal cancelled out.
+     * Reporting the failure once, here, and handling it once, there, keeps exactly one place
+     * responsible for each.
+     *
+     * @return normalized trips; empty is a legitimate answer meaning the provider served none
+     * @throws com.roadscanner.searchservice.location.domain.exception.ProviderSearchFailedException
+     *         if the provider could not be reached or returned an unusable response
      */
     List<ProviderTripResult> search(ProviderCode provider, String originCityId, String destinationCityId,
                                     LocalDate travelDate);

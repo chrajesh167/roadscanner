@@ -2,6 +2,7 @@ package com.roadscanner.searchservice.adapter.out.client;
 
 import com.roadscanner.searchservice.domain.model.ProviderTripResult;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
+import com.roadscanner.searchservice.location.domain.exception.ProviderSearchFailedException;
 import com.roadscanner.searchservice.location.domain.model.ProviderCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -84,12 +86,36 @@ class ProviderIntegrationSearchClientAdapterTest {
     }
 
     @Test
-    void degradesToAnEmptyListWhenProviderIntegrationIsUnreachable() {
+    void reportsAnHttpErrorAsAFailedProviderSearch() {
         mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
                 .andRespond(withServerError());
 
-        // One provider being down must not empty a traveller's whole result set — the same
-        // "degrade, not fail" rule the availability overlay follows.
+        // Reported rather than absorbed. Returning empty here made an outage look identical to a
+        // provider that simply serves no trips, so the federation could not tell a caller its
+        // answer was partial. Degradation still happens — one level up, where it can be recorded.
+        assertThatThrownBy(() -> adapter.search(FLIXBUS, "58291", "41100", DATE))
+                .isInstanceOf(ProviderSearchFailedException.class)
+                .hasMessageContaining("FLIXBUS");
+    }
+
+    @Test
+    void reportsATimeoutAsAFailedProviderSearch() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(request -> {
+                    throw new java.net.SocketTimeoutException("read timed out");
+                });
+
+        assertThatThrownBy(() -> adapter.search(FLIXBUS, "58291", "41100", DATE))
+                .isInstanceOf(ProviderSearchFailedException.class);
+    }
+
+    @Test
+    void treatsAProviderWithNoTripsAsASuccessfulSearch() {
+        mockServer.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+                .andRespond(withSuccess("{\"trips\":[]}", MediaType.APPLICATION_JSON));
+
+        // "Serves no trips on this route" is an answer, not a failure — it must never mark the
+        // search incomplete.
         assertThat(adapter.search(FLIXBUS, "58291", "41100", DATE)).isEmpty();
     }
 

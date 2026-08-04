@@ -6,9 +6,8 @@ import com.roadscanner.searchservice.domain.model.ProviderTripResult;
 import com.roadscanner.searchservice.domain.model.Route;
 import com.roadscanner.searchservice.domain.model.Schedule;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
+import com.roadscanner.searchservice.location.domain.exception.ProviderSearchFailedException;
 import com.roadscanner.searchservice.location.domain.model.ProviderCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -27,15 +26,16 @@ import java.util.List;
  * service — never to a provider. The wire format below is provider-integration-service's canonical
  * contract, identical for every provider, so onboarding a new one changes nothing here.
  *
- * <p><strong>Degrades rather than fails.</strong> A provider outage returns an empty list and a
- * warning, matching how {@code InventoryAvailabilityClientAdapter} handles an unreachable
- * inventory-service: a traveller searching for trips should still see first-party results when one
- * provider is down, not an error page.
+ * <p><strong>Reports failures; does not absorb them.</strong> A provider outage throws
+ * {@link ProviderSearchFailedException}, which the federation catches per provider so a traveller
+ * still sees first-party results and every working provider's trips. That is a deliberate departure
+ * from {@code InventoryAvailabilityClientAdapter}, which absorbs its own failure: that overlay has
+ * a value meaning "unknown" to fall back to, whereas an empty trip list is indistinguishable from a
+ * provider that genuinely serves no trips.
  */
 @Component
 class ProviderIntegrationSearchClientAdapter implements ProviderTripSearchClient {
 
-    private static final Logger log = LoggerFactory.getLogger(ProviderIntegrationSearchClientAdapter.class);
     private static final String SEARCH_PATH = "/internal/api/v1/providers/{providerType}/trips";
 
     private final RestClient restClient;
@@ -62,9 +62,11 @@ class ProviderIntegrationSearchClientAdapter implements ProviderTripSearchClient
             }
             return response.trips().stream().map(dto -> toResult(provider, dto)).toList();
         } catch (RestClientException e) {
-            // Degrade, never fail: one provider being unreachable must not empty the whole result.
-            log.warn("Provider search failed for provider={} — continuing without its results", provider, e);
-            return List.of();
+            // Reported, not hidden. Swallowing this here returned the same empty list as a provider
+            // that simply serves no trips on the route, which is why a failed search was being
+            // presented to callers as a complete one. The federation catches this, marks the
+            // provider failed, and still returns every other provider's results.
+            throw new ProviderSearchFailedException(provider.value(), e);
         }
     }
 

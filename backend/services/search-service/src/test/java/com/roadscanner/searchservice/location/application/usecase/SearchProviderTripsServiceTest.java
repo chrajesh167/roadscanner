@@ -6,6 +6,7 @@ import com.roadscanner.searchservice.domain.model.Route;
 import com.roadscanner.searchservice.domain.model.Schedule;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
 import com.roadscanner.searchservice.location.domain.model.LocationId;
+import com.roadscanner.searchservice.location.domain.exception.ProviderSearchFailedException;
 import com.roadscanner.searchservice.location.domain.model.ProviderCode;
 import com.roadscanner.searchservice.location.domain.model.ProviderLocationMapping;
 import com.roadscanner.searchservice.location.domain.model.ProviderLocationMappingId;
@@ -259,6 +260,76 @@ class SearchProviderTripsServiceTest {
                     .containsExactly("fb-1", "ab-1");
             assertThat(result.succeeded()).containsExactlyInAnyOrder(FLIXBUS, ABHIBUS);
             assertThat(result.failed()).containsExactly(REDBUS);
+        }
+
+        @Test
+        void everyProviderSucceedingReportsACompleteAnswer() {
+            mapThreeProviders();
+            client.returns(FLIXBUS, trip(FLIXBUS, "fb-1", 8));
+            client.returns(REDBUS, trip(REDBUS, "rb-1", 9));
+            client.returns(ABHIBUS, trip(ABHIBUS, "ab-1", 10));
+
+            var result = search();
+
+            assertThat(result.complete()).isTrue();
+            assertThat(result.failed()).isEmpty();
+            assertThat(result.succeeded()).hasSize(3);
+        }
+
+        @Test
+        void aProviderWithNoTripsIsStillASuccessfulSearch() {
+            mapThreeProviders();
+            client.returns(FLIXBUS, trip(FLIXBUS, "fb-1", 8));
+            client.returns(REDBUS);
+            client.returns(ABHIBUS);
+
+            var result = search();
+
+            // The distinction this whole fix rests on: "serves no trips on this route" is an
+            // answer. Only a provider that could not be asked makes the result partial, and
+            // conflating the two is what made an outage look like an empty market.
+            assertThat(result.complete()).isTrue();
+            assertThat(result.failed()).isEmpty();
+            assertThat(result.trips()).extracting(ProviderTripResult::providerTripId).containsExactly("fb-1");
+        }
+
+        @Test
+        void everyProviderFailingReportsAnEmptyIncompleteAnswer() {
+            mapThreeProviders();
+            client.fails(FLIXBUS, new IllegalStateException("boom"));
+            client.fails(REDBUS, new RuntimeException("timeout"));
+            client.fails(ABHIBUS, new IllegalStateException("http 503"));
+
+            var result = search();
+
+            // Empty and incomplete, which is a different answer from empty and complete: the first
+            // means "we could not find out", the second means "nobody flies this route".
+            assertThat(result.trips()).isEmpty();
+            assertThat(result.complete()).isFalse();
+            assertThat(result.failed()).containsExactlyInAnyOrder(FLIXBUS, REDBUS, ABHIBUS);
+            assertThat(result.succeeded()).isEmpty();
+        }
+
+        @Test
+        void anyFailureKindMarksTheAnswerIncomplete() {
+            // The federation must not care which failure it was. A catch narrowed to one exception
+            // type would silently let the others through as a complete answer.
+            for (RuntimeException failure : java.util.List.of(
+                    new ProviderSearchFailedException("REDBUS", new java.net.SocketTimeoutException("read timed out")),
+                    new ProviderSearchFailedException("REDBUS", new IllegalStateException("http 500")),
+                    new IllegalStateException("unexpected runtime failure"))) {
+                setUp();
+                mapThreeProviders();
+                client.returns(FLIXBUS, trip(FLIXBUS, "fb-1", 8));
+                client.fails(REDBUS, failure);
+
+                var result = search();
+
+                assertThat(result.complete()).as("%s must mark the answer incomplete", failure).isFalse();
+                assertThat(result.failed()).containsExactly(REDBUS);
+                // Degradation intact: the healthy provider still contributed.
+                assertThat(result.trips()).extracting(ProviderTripResult::providerTripId).containsExactly("fb-1");
+            }
         }
 
         @Test
