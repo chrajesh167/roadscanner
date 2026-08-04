@@ -14,6 +14,10 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +66,23 @@ class LocationRepositoryAdapterTest {
 
     private Location save(String displayName, LocationAddress address) {
         return adapter.save(location(displayName, address));
+    }
+
+    /**
+     * The search results this test authored, in the order the repository returned them.
+     *
+     * <p>The location catalogue is curated master data: rows seeded by a migration, or left by
+     * another test, are legitimately present and share city names with these fixtures. Asserting on
+     * the raw result list would therefore be asserting on the whole database, and would fail for a
+     * reason that has nothing to do with the behaviour under test.
+     *
+     * <p>Filtering by id rather than by name keeps every assertion below exactly as strong: relative
+     * ordering, exactness and the absence of a row are all still checked, just over the rows this
+     * test owns.
+     */
+    private static List<Location> authoredBy(List<Location> results, Location... created) {
+        Set<LocationId> mine = Arrays.stream(created).map(Location::id).collect(Collectors.toSet());
+        return results.stream().filter(found -> mine.contains(found.id())).toList();
     }
 
     @Test
@@ -128,7 +149,9 @@ class LocationRepositoryAdapterTest {
         assertThat(found.updatedAt()).isEqualTo(NOW.plusSeconds(60));
         // createdAt is fixed for the row's lifetime — an update must not rewrite it.
         assertThat(found.createdAt()).isEqualTo(NOW);
-        assertThat(adapter.searchActiveByPrefix("Hyderabad", 25)).hasSize(1);
+        // The point of this assertion is that the second save updated rather than inserted, so it
+        // counts occurrences of this one location — not the size of the whole catalogue.
+        assertThat(authoredBy(adapter.searchActiveByPrefix("Hyderabad", 25), hyderabad)).hasSize(1);
     }
 
     @Test
@@ -191,20 +214,24 @@ class LocationRepositoryAdapterTest {
     @Test
     void searchMatchesADisplayNamePrefixCaseInsensitively() {
         Location hyderabad = save("Hyderabad", HYDERABAD);
-        save("Pune", PUNE);
+        Location pune = save("Pune", PUNE);
 
-        assertThat(adapter.searchActiveByPrefix("hYd", 25)).extracting(Location::id).containsExactly(hyderabad.id());
+        // Still exact over this test's own rows: Hyderabad matches "hYd" and Pune must not.
+        assertThat(authoredBy(adapter.searchActiveByPrefix("hYd", 25), hyderabad, pune))
+                .extracting(Location::id).containsExactly(hyderabad.id());
     }
 
     @Test
     void searchAlsoMatchesOnCityAndRanksDisplayNameHitsFirst() {
-        save("MGBS", HYDERABAD);
-        save("Hyderabad Deccan", HYDERABAD);
-        save("Hyderabad", HYDERABAD);
+        Location mgbs = save("MGBS", HYDERABAD);
+        Location deccan = save("Hyderabad Deccan", HYDERABAD);
+        Location hyderabad = save("Hyderabad", HYDERABAD);
 
         // Typing "hyd" should surface Hyderabad itself above a stop that merely sits in it,
-        // then fall back to alphabetical for a stable list.
-        assertThat(adapter.searchActiveByPrefix("hyd", 25)).extracting(Location::displayName)
+        // then fall back to alphabetical for a stable list. Relative order is preserved by the
+        // filter, so the ranking rule is asserted exactly as before.
+        assertThat(authoredBy(adapter.searchActiveByPrefix("hyd", 25), mgbs, deccan, hyderabad))
+                .extracting(Location::displayName)
                 .containsExactly("Hyderabad", "Hyderabad Deccan", "MGBS");
     }
 
