@@ -20,16 +20,24 @@ class FlixBusSearchClient {
     private final RestClient restClient;
     private final FlixBusMapper mapper;
     private final FlixBusExceptionTranslator exceptionTranslator;
+    private final FlixBusCredentials credentials;
 
-    FlixBusSearchClient(RestClient flixBusRestClient, FlixBusMapper mapper, FlixBusExceptionTranslator exceptionTranslator) {
+    FlixBusSearchClient(RestClient flixBusRestClient, FlixBusMapper mapper,
+                        FlixBusExceptionTranslator exceptionTranslator, FlixBusCredentials credentials) {
         this.restClient = flixBusRestClient;
         this.mapper = mapper;
         this.exceptionTranslator = exceptionTranslator;
+        this.credentials = credentials;
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "searchFallback")
-    // Sprint 3A only re-points this at the session-less generic signature; the request shape,
-    // endpoint and authentication are untouched and are Sprint 3B's work.
+    // Authenticated with the static partner token from the encrypted credential store — the only
+    // header FlixBus requires for search. No session is established: X-API-Session applies to
+    // authenticated operations (cart, checkout, booking) and is Sprint 4's work.
+    //
+    // ASSUMPTION, inherited from an earlier sprint and NOT from the supplied contract: the request
+    // path and query shape below, and the response DTO it binds. The real search binding is
+    // deliberately deferred until the actual response schema is available — see the sprint notes.
     List<ProviderTrip> search(Provider provider, SearchCriteria criteria) {
         try {
             FlixBusMapper.TripsResponseDto response = restClient.get()
@@ -38,6 +46,7 @@ class FlixBusSearchClient {
                             .queryParam("destination", criteria.destinationCityId())
                             .queryParam("date", criteria.travelDate())
                             .build())
+                    .header(FlixBusCredentials.AUTHENTICATION_HEADER, credentials.partnerToken(provider))
                     .retrieve()
                     .body(FlixBusMapper.TripsResponseDto.class);
             return mapper.toProviderTrips(response);

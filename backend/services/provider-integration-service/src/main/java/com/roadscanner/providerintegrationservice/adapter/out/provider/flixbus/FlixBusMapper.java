@@ -60,12 +60,21 @@ final class FlixBusMapper {
         return new ProviderToken(dto.accessToken(), dto.refreshToken(), dto.tokenType(), expiresAt);
     }
 
-    TokenRequestDto toClientCredentialsRequest(FlixBusProperties properties) {
-        return new TokenRequestDto("client_credentials", properties.clientId(), properties.clientSecret(), null);
+    /**
+     * Secrets come from the encrypted credential store, never from configuration — an operator
+     * rotating a partner secret through the admin API must take effect without a redeploy.
+     *
+     * <p>ASSUMPTION, inherited from an earlier sprint: the grant-type shape below. The supplied
+     * contract specifies partner login as an email/password POST to
+     * {@code /public/v1/partner/authenticate.json}; reconciling the two is Sprint 4's work, which
+     * is why nothing here was redesigned.
+     */
+    TokenRequestDto toClientCredentialsRequest(FlixBusCredentials.PartnerLogin login) {
+        return new TokenRequestDto("client_credentials", login.email(), login.password(), null);
     }
 
-    TokenRequestDto toRefreshTokenRequest(FlixBusProperties properties, String refreshToken) {
-        return new TokenRequestDto("refresh_token", properties.clientId(), properties.clientSecret(), refreshToken);
+    TokenRequestDto toRefreshTokenRequest(FlixBusCredentials.PartnerLogin login, String refreshToken) {
+        return new TokenRequestDto("refresh_token", login.email(), login.password(), refreshToken);
     }
 
     List<ProviderTrip> toProviderTrips(TripsResponseDto dto) {
@@ -129,6 +138,20 @@ final class FlixBusMapper {
 
     // --- Wire DTOs -----------------------------------------------------------------------
 
+    /**
+     * TODO(sprint-4): reconcile these field names with FlixBus's real partner-authentication
+     * schema.
+     *
+     * <p>{@code clientId}/{@code clientSecret} now carry the partner <em>email</em> and
+     * <em>password</em> resolved from {@code provider_credentials}, so the names no longer describe
+     * their contents. Left unchanged deliberately: a record component name is the outbound JSON
+     * field name, so renaming these would silently alter a provider-facing request body. Guessing a
+     * provider's wire contract is exactly the failure mode this sprint was scoped to avoid — the
+     * rename lands together with the real schema, verified against it, not before.
+     *
+     * <p>Only the names are stale. The values are correct and come from the encrypted store; no
+     * secret reaches this DTO from configuration.
+     */
     record TokenRequestDto(String grantType, String clientId, String clientSecret, String refreshToken) {
     }
 

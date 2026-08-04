@@ -42,8 +42,6 @@ roadscanner:
       # README.md "Remaining Integration Points"). The FLIXBUS provider row is seeded
       # enabled=false, so nothing calls this URL until it's replaced with a real one.
       base-url: https://flixbus.example.invalid
-      client-id: local-placeholder-client-id
-      client-secret: local-placeholder-client-secret
 
 logging:
   level:

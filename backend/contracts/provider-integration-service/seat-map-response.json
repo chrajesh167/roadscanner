@@ -1,0 +1,30 @@
+{
+  "providerTripId": "ride-1",
+  "providerType": "FLIXBUS",
+  "seats": [
+    {
+      "seatNumber": "1A",
+      "deck": "LOWER",
+      "seatType": "SLEEPER",
+      "status": "AVAILABLE",
+      "priceAmount": 899.00,
+      "priceCurrency": "INR"
+    },
+    {
+      "seatNumber": "1B",
+      "deck": "LOWER",
+      "seatType": "SLEEPER",
+      "status": "BOOKED",
+      "priceAmount": 899.00,
+      "priceCurrency": "INR"
+    },
+    {
+      "seatNumber": "2A",
+      "deck": "UPPER",
+      "seatType": "SEATER",
+      "status": "AVAILABLE",
+      "priceAmount": 650.00,
+      "priceCurrency": "INR"
+    }
+  ]
+}

@@ -23,14 +23,14 @@ class FlixBusAuthenticationClient {
     private final RestClient restClient;
     private final FlixBusMapper mapper;
     private final FlixBusExceptionTranslator exceptionTranslator;
-    private final FlixBusProperties properties;
+    private final FlixBusCredentials credentials;
 
     FlixBusAuthenticationClient(RestClient flixBusRestClient, FlixBusMapper mapper,
-                                 FlixBusExceptionTranslator exceptionTranslator, FlixBusProperties properties) {
+                                 FlixBusExceptionTranslator exceptionTranslator, FlixBusCredentials credentials) {
         this.restClient = flixBusRestClient;
         this.mapper = mapper;
         this.exceptionTranslator = exceptionTranslator;
-        this.properties = properties;
+        this.credentials = credentials;
     }
 
     @CircuitBreaker(name = "flixbus", fallbackMethod = "authenticateFallback")
@@ -38,7 +38,7 @@ class FlixBusAuthenticationClient {
         try {
             FlixBusMapper.TokenResponseDto response = restClient.post()
                     .uri(TOKEN_PATH)
-                    .body(mapper.toClientCredentialsRequest(properties))
+                    .body(mapper.toClientCredentialsRequest(credentials.partnerLogin(provider)))
                     .retrieve()
                     .body(FlixBusMapper.TokenResponseDto.class);
             return mapper.toProviderToken(response);
@@ -62,7 +62,7 @@ class FlixBusAuthenticationClient {
                                     "Session has no refresh token", false)));
             FlixBusMapper.TokenResponseDto response = restClient.post()
                     .uri(TOKEN_PATH)
-                    .body(mapper.toRefreshTokenRequest(properties, refreshToken))
+                    .body(mapper.toRefreshTokenRequest(credentials.partnerLogin(provider), refreshToken))
                     .retrieve()
                     .body(FlixBusMapper.TokenResponseDto.class);
             return mapper.toProviderToken(response);

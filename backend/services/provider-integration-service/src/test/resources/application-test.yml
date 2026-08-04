@@ -16,5 +16,3 @@ roadscanner:
   provider:
     flixbus:
       base-url: http://localhost:0 # overridden per-test via MockRestServiceServer or a dynamic property
-      client-id: test-client-id
-      client-secret: test-client-secret

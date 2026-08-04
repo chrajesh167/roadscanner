@@ -33,8 +33,6 @@ roadscanner:
   provider:
     flixbus:
       base-url: ${FLIXBUS_BASE_URL}
-      client-id: ${FLIXBUS_CLIENT_ID}
-      client-secret: ${FLIXBUS_CLIENT_SECRET}
 
 logging:
   level:

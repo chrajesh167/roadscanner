@@ -3,6 +3,8 @@ package com.roadscanner.providerintegrationservice.adapter.out.provider.flixbus;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderUnavailableException;
 import com.roadscanner.providerintegrationservice.domain.model.Provider;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderCategory;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCredentials;
+import com.roadscanner.providerintegrationservice.domain.model.ProviderCredentialsId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderId;
 import com.roadscanner.providerintegrationservice.domain.model.ProviderType;
 import com.roadscanner.providerintegrationservice.testsupport.TestcontainersConfiguration;
@@ -54,10 +56,27 @@ class FlixBusResilienceTest {
     @Autowired
     private CircuitBreakerRegistry circuitBreakerRegistry;
 
+    @Autowired
+    private com.roadscanner.providerintegrationservice.domain.port.out.ProviderConfigurationRepository
+            configurationRepository;
+
+    @Autowired
+    private com.roadscanner.providerintegrationservice.domain.port.out.ProviderCredentialsRepository
+            credentialsRepository;
+
     @Test
     void repeatedConnectionFailuresOpenTheCircuitBreakerAndSurfaceAsProviderUnavailable() {
-        Provider flixbus = Provider.reconstitute(ProviderId.generate(), ProviderType.FLIXBUS, ProviderCategory.BUS, "FlixBus", true,
-                Set.of(), "http://127.0.0.1:1", 5_000, 2, Instant.now(), Instant.now());
+        // Credentials must exist for the call to reach the network at all: since Sprint 3B the
+        // adapter resolves its partner secrets from the encrypted store and fails fast without
+        // them. Seeded against the real seeded FLIXBUS row so the foreign key holds.
+        Provider seeded = configurationRepository.findByType(ProviderType.FLIXBUS).orElseThrow();
+        credentialsRepository.save(ProviderCredentials.issue(ProviderCredentialsId.generate(), seeded.id(),
+                "partner@roadscanner.com", "s3cret", "partner-token-abc", Instant.now()));
+
+        // Same identity, but pointed at a port that always refuses — this is what exercises the
+        // breaker rather than the credential guard.
+        Provider flixbus = Provider.reconstitute(seeded.id(), ProviderType.FLIXBUS, ProviderCategory.BUS, "FlixBus",
+                true, Set.of(), "http://127.0.0.1:1", 5_000, 2, Instant.now(), Instant.now());
 
         for (int i = 0; i < 6; i++) {
             assertThatCallFailsWithProviderUnavailable(flixbus);
