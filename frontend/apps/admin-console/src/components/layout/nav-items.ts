@@ -4,6 +4,7 @@ import {
   ScrollText,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   Waypoints,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -30,16 +31,16 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Register, configure and put providers in service',
   },
   {
-    href: '/location-mappings',
-    label: 'Location Mappings',
-    icon: Waypoints,
-    description: 'Translate canonical locations into provider identifiers',
-  },
-  {
     href: '/credentials',
     label: 'Credentials',
     icon: ShieldCheck,
     description: 'Partner secret presence and rotation',
+  },
+  {
+    href: '/location-mappings',
+    label: 'Location Mappings',
+    icon: Waypoints,
+    description: 'Translate canonical locations into provider identifiers',
   },
   {
     href: '/health',
@@ -52,6 +53,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Audit',
     icon: ScrollText,
     description: 'Provider audit history',
+  },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: SlidersHorizontal,
+    description: 'Platform configuration — not available yet',
   },
 ];
 
