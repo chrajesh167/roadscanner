@@ -51,6 +51,7 @@ public class SecurityConfig {
 
     private static final String LOCATIONS = "/api/v1/locations";
     private static final String LOCATION_BY_ID = "/api/v1/locations/*";
+    private static final String PROVIDER_MAPPINGS = "/api/v1/provider-mappings/**";
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
@@ -63,6 +64,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, LOCATIONS).hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.PUT, LOCATION_BY_ID).hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.DELETE, LOCATION_BY_ID).hasRole(ADMIN_ROLE)
+
+                        // --- Administrative: the provider translation layer. ---
+                        // Gated on every method, reads included — unlike the location catalogue
+                        // above, whose GETs are public. These are the only responses in the service
+                        // that carry a provider's own identifiers, and keeping provider vocabulary
+                        // out of traveller-facing contracts is what the location module exists to
+                        // guarantee. A public read here would undo that in one line.
+                        .requestMatchers(PROVIDER_MAPPINGS).hasRole(ADMIN_ROLE)
 
                         // --- Public read surface: unchanged, anonymous, exactly as before. ---
                         .requestMatchers(HttpMethod.GET, LOCATIONS, LOCATION_BY_ID).permitAll()

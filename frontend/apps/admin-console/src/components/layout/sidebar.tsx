@@ -66,10 +66,10 @@ export function Sidebar() {
       <SidebarNav />
       <div className="border-t border-line p-4">
         <p className="text-micro uppercase tracking-[0.08em] text-content-muted">
-          provider-integration-service
+          provider-integration-service · search-service
         </p>
         <p className="mt-1 text-caption text-content-muted">
-          The platform&apos;s only provider registry.
+          One provider registry, and the location catalogue that translates into it.
         </p>
       </div>
     </aside>

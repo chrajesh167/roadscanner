@@ -3,11 +3,13 @@ package com.roadscanner.searchservice.location.adapter.out.persistence;
 import com.roadscanner.searchservice.location.domain.model.GooglePlaceId;
 import com.roadscanner.searchservice.location.domain.model.Location;
 import com.roadscanner.searchservice.location.domain.model.LocationId;
+import com.roadscanner.searchservice.location.domain.model.ProviderCode;
 import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -43,6 +45,22 @@ class LocationRepositoryAdapter implements LocationRepository {
     @Override
     public Optional<Location> findByGooglePlaceId(GooglePlaceId googlePlaceId) {
         return springDataRepository.findByGooglePlaceId(googlePlaceId.value()).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Location> findActiveWithoutMappingForProvider(ProviderCode provider, String searchTerm, int limit) {
+        // Blank and absent mean the same thing to a caller; the query treats null as "no filter".
+        // The pattern is built here rather than in JPQL because a null fed into lower() leaves
+        // Postgres nothing to infer a type from and it binds as bytea — see the query's Javadoc.
+        String pattern = searchTerm == null || searchTerm.isBlank()
+                ? null
+                : "%" + searchTerm.trim().toLowerCase(Locale.ROOT)
+                        .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+
+        return springDataRepository
+                .findActiveWithoutMappingForProvider(provider.value(), pattern, PageRequest.of(0, limit)).stream()
+                .map(mapper::toDomain)
+                .toList();
     }
 
     @Override

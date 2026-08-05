@@ -1,4 +1,12 @@
-import { Activity, LayoutDashboard, ScrollText, Server, ShieldCheck } from 'lucide-react';
+import {
+  Activity,
+  LayoutDashboard,
+  ScrollText,
+  Server,
+  ShieldCheck,
+  SlidersHorizontal,
+  Waypoints,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -29,6 +37,12 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Partner secret presence and rotation',
   },
   {
+    href: '/location-mappings',
+    label: 'Location Mappings',
+    icon: Waypoints,
+    description: 'Translate canonical locations into provider identifiers',
+  },
+  {
     href: '/health',
     label: 'Health',
     icon: Activity,
@@ -39,6 +53,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Audit',
     icon: ScrollText,
     description: 'Provider audit history',
+  },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: SlidersHorizontal,
+    description: 'Platform configuration — not available yet',
   },
 ];
 

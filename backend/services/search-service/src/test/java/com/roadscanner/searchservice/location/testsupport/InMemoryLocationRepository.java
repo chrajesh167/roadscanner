@@ -3,6 +3,7 @@ package com.roadscanner.searchservice.location.testsupport;
 import com.roadscanner.searchservice.location.domain.model.GooglePlaceId;
 import com.roadscanner.searchservice.location.domain.model.Location;
 import com.roadscanner.searchservice.location.domain.model.LocationId;
+import com.roadscanner.searchservice.location.domain.model.ProviderCode;
 import com.roadscanner.searchservice.location.domain.port.out.LocationRepository;
 
 import java.util.ArrayList;
@@ -26,6 +27,9 @@ import java.util.Optional;
 public final class InMemoryLocationRepository implements LocationRepository {
 
     private final Map<LocationId, Location> stored = new LinkedHashMap<>();
+
+    /** Optional; set via {@link #linkMappings}. Null means "no mappings exist". */
+    private InMemoryProviderLocationMappingRepository mappings;
 
     @Override
     public Optional<Location> findById(LocationId id) {
@@ -56,6 +60,38 @@ public final class InMemoryLocationRepository implements LocationRepository {
                 .findFirst();
     }
 
+    /**
+     * Reproduces the anti-join's contract by consulting the mapping double this one has been
+     * linked to. Unlinked, every active location counts as unmapped — which is the correct answer
+     * for a fixture that holds no mappings, not a shortcut.
+     *
+     * <p>Whether Postgres actually turns the {@code NOT EXISTS} into an anti-join, and whether it
+     * uses the unique index, is the adapter test's business.
+     */
+    @Override
+    public List<Location> findActiveWithoutMappingForProvider(ProviderCode provider, String searchTerm, int limit) {
+        String needle = searchTerm == null || searchTerm.isBlank()
+                ? null
+                : searchTerm.trim().toLowerCase(Locale.ROOT);
+
+        return stored.values().stream()
+                .filter(Location::isActive)
+                .filter(location -> mappings == null
+                        || mappings.findByLocationAndProvider(location.id(), provider).isEmpty())
+                .filter(location -> needle == null
+                        || contains(location.displayName(), needle)
+                        || contains(location.address().city(), needle))
+                .sorted(Comparator.comparing(Location::displayName))
+                .limit(limit)
+                .toList();
+    }
+
+    /** Links the mapping double so the anti-join above has something to exclude against. */
+    public InMemoryLocationRepository linkMappings(InMemoryProviderLocationMappingRepository mappingRepository) {
+        this.mappings = mappingRepository;
+        return this;
+    }
+
     @Override
     public Location save(Location location) {
         stored.put(location.id(), location);
@@ -75,5 +111,9 @@ public final class InMemoryLocationRepository implements LocationRepository {
 
     private static boolean startsWith(String value, String lowerCasePrefix) {
         return value.toLowerCase(Locale.ROOT).startsWith(lowerCasePrefix);
+    }
+
+    private static boolean contains(String value, String lowerCaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerCaseNeedle);
     }
 }

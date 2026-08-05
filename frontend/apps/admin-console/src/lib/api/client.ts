@@ -187,6 +187,7 @@ function createClient(baseURL: string): AxiosInstance {
 
 export const authApi = createClient(API.auth);
 export const providerApi = createClient(API.providerIntegration);
+export const searchApi = createClient(API.search);
 
 /** Marks a request as exempt from the refresh-and-replay path. */
 export function withoutAuthRefresh(config: AxiosRequestConfig = {}): AxiosRequestConfig {

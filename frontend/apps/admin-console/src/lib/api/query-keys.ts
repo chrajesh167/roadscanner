@@ -18,4 +18,26 @@ export const queryKeys = {
      */
     probe: (providerCode: string) => ['health', providerCode] as const,
   },
+  /**
+   * search-service. Kept under one root so a mutation can invalidate every list, page and filter
+   * combination at once — a created or deleted mapping changes which rows any of them contain,
+   * and there is no way to know which page a row landed on without asking.
+   */
+  providerMappings: {
+    all: ['provider-mappings'] as const,
+    list: (filters: {
+      provider: string | null;
+      verified: boolean | null;
+      search: string;
+      page: number;
+      size: number;
+    }) => ['provider-mappings', 'list', filters] as const,
+    /** The worklist is per provider — "unmapped" has no meaning without one. */
+    unmapped: (provider: string | null, search: string) =>
+      ['provider-mappings', 'unmapped', { provider, search }] as const,
+  },
+  locations: {
+    all: ['locations'] as const,
+    search: (term: string) => ['locations', 'search', term] as const,
+  },
 } as const;

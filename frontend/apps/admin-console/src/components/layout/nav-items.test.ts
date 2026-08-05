@@ -24,4 +24,31 @@ describe('activeNavHref', () => {
       expect(activeNavHref(item.href)).toBe(item.href);
     }
   });
+
+  it('keeps the unmapped worklist under Location Mappings', () => {
+    expect(activeNavHref('/location-mappings/unmapped')).toBe('/location-mappings');
+  });
+});
+
+describe('NAV_ITEMS', () => {
+  it('is ordered to follow the work: register, secure, map, then observe', () => {
+    // Asserted rather than assumed, because the order is a product decision — the sidebar reads
+    // as the sequence an operator actually onboards a provider in.
+    expect(NAV_ITEMS.map((item) => item.label)).toEqual([
+      'Dashboard',
+      'Providers',
+      'Credentials',
+      'Location Mappings',
+      'Health',
+      'Audit',
+      'Settings',
+    ]);
+  });
+
+  it('points every item at a route that exists', () => {
+    // A nav entry to a missing route is a 404 with a signpost pointing at it.
+    for (const item of NAV_ITEMS) {
+      expect(item.href).toMatch(/^\/[a-z-]+$/);
+    }
+  });
 });

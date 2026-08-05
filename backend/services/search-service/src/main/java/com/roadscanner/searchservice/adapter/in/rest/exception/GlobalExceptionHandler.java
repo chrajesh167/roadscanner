@@ -4,7 +4,9 @@ import com.roadscanner.searchservice.adapter.in.rest.filter.CorrelationIdFilter;
 import com.roadscanner.searchservice.domain.exception.SearchServiceException;
 import com.roadscanner.searchservice.domain.exception.TripNotFoundException;
 import com.roadscanner.searchservice.location.domain.exception.DuplicateGooglePlaceIdException;
+import com.roadscanner.searchservice.location.domain.exception.DuplicateProviderMappingException;
 import com.roadscanner.searchservice.location.domain.exception.LocationNotFoundException;
+import com.roadscanner.searchservice.location.domain.exception.ProviderMappingNotFoundException;
 import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteRateLimitedException;
 import com.roadscanner.searchservice.location.domain.exception.PlaceAutocompleteUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -95,6 +97,28 @@ public class GlobalExceptionHandler {
         // caller can tell "you sent something wrong" from "someone already claimed this".
         log.warn("Duplicate google place id on {}: {}", request.getRequestURI(), ex.googlePlaceId());
         return respond(HttpStatus.CONFLICT, "That Google place is already mapped to another location", request);
+    }
+
+    @ExceptionHandler(ProviderMappingNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProviderMappingNotFound(ProviderMappingNotFoundException ex,
+                                                                       HttpServletRequest request) {
+        log.info("Provider mapping not found on {}", request.getRequestURI());
+        return respond(HttpStatus.NOT_FOUND, "Provider mapping not found", request);
+    }
+
+    @ExceptionHandler(DuplicateProviderMappingException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateProviderMapping(DuplicateProviderMappingException ex,
+                                                                        HttpServletRequest request) {
+        // 409 for the same reason as a duplicate Google place id: the request was well-formed, it
+        // just collides with state someone else already claimed.
+        //
+        // The offending field travels as a fieldError so the admin console can attach the message
+        // to the input that caused it — the three rules fail for genuinely different reasons, and
+        // "which field do I change?" is the only question the operator has at that moment.
+        log.warn("Duplicate provider mapping on {}: {}", request.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(build(HttpStatus.CONFLICT, ex.getMessage(), request,
+                        List.of(new ErrorResponse.FieldError(ex.conflict().field(), ex.getMessage()))));
     }
 
     @ExceptionHandler(PlaceAutocompleteRateLimitedException.class)
