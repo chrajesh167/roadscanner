@@ -1,4 +1,11 @@
-import { Activity, LayoutDashboard, ScrollText, Server, ShieldCheck } from 'lucide-react';
+import {
+  Activity,
+  LayoutDashboard,
+  ScrollText,
+  Server,
+  ShieldCheck,
+  Waypoints,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -21,6 +28,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Providers',
     icon: Server,
     description: 'Register, configure and put providers in service',
+  },
+  {
+    href: '/location-mappings',
+    label: 'Location Mappings',
+    icon: Waypoints,
+    description: 'Translate canonical locations into provider identifiers',
   },
   {
     href: '/credentials',
