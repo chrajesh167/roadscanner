@@ -26,9 +26,30 @@ roadscanner:
     allowed-origins: http://localhost:5173,http://localhost:5174
   security:
     jwt:
-      # Local development only: throwaway verification key generated at startup. Never set in a
-      # deployed environment.
-      ephemeral-keys: true
+      # ---------------------------------------------------------------------------------------
+      # auth-service's SHARED DEVELOPMENT public key. NOT A SECRET, and the private half is not
+      # here — this service only ever verifies.
+      #
+      # Byte-identical to the public half in auth-service's own application-local.yml, which is
+      # what makes one locally-issued token work across the whole stack. It replaces
+      # `ephemeral-keys: true`, which generated a throwaway pair per process: login succeeded at
+      # auth-service and every call here 401'd, because the two never shared key material.
+      #
+      # The flag is deliberately absent rather than set to false — JwtConfig checks it *before*
+      # the configured key, so leaving it on would silently win and this key would be ignored.
+      #
+      # Deployed environments never load this file. There, `public-key-pem` comes from the
+      # secrets manager, and a missing key still fails startup loudly — see config/JwtConfig.
+      public-key-pem: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu8GV0iNS6+j6v457XNVO
+        8bZGbHGyZiM1kP2UKGvARMNensJhn6onErFC/rN9Odqtp3IAV2L/LgPy4MEXe1zW
+        NZYFNr9roDTwkje9H+mq+jOnBDXEbnYkMRYdH1EA9OyQcTUEKP5nv8MIreChpQpR
+        1SNVUrBtzHI4pN5QyyHUvUYsefj1c9qjzN8AhKS2fI6PSEH1g0YUlnV40NjvFzt3
+        phLXR/mgUkTiyy4FrFyW3Wb165nXB1UQTpnUHyXJUc0wsiPLhCx62M5KMZRxHnfn
+        C5sXoPARKQu8xlc5E+mDQ4nNm2jjPsAmXGykyr9b8yWlLDnZMW3GST9EnIjFFZ33
+        nQIDAQAB
+        -----END PUBLIC KEY-----
   payment:
     gateways:
       default-type: RAZORPAY

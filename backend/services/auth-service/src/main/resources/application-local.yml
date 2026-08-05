@@ -28,10 +28,63 @@ roadscanner:
     allowed-origins: http://localhost:5173,http://localhost:5174
   security:
     jwt:
-      # Local development only: throwaway signing keys generated at startup. Tokens do not
-      # survive a restart, and nothing outside this process can rely on them — which is the
-      # point. Never set this in a deployed environment; see config/JwtConfig.
-      ephemeral-keys: true
+      # ---------------------------------------------------------------------------------------
+      # THE SHARED DEVELOPMENT KEY PAIR. NOT A SECRET. NEVER USE IT ANYWHERE REAL.
+      #
+      # This pair is checked into the repository on purpose. Every verifying service's own
+      # application-local.yml carries the public half verbatim, so one token minted here is
+      # accepted by search-service, provider-integration-service, booking-service and
+      # payment-service — which is what makes a locally-running stack usable from the UIs at all.
+      #
+      # It replaces `ephemeral-keys: true`, which generated a *different* throwaway pair in every
+      # process: login succeeded and every subsequent call 401'd, because five services each
+      # trusted a key only they had. Note the flag is not merely unset but absent — each
+      # verifier's JwtConfig checks it before the configured key, so leaving it on would silently
+      # win and the fix would do nothing.
+      #
+      # Deployed environments never see this file (it also points every datasource at localhost).
+      # There, `private-key-pem` and `public-key-pem` come from the secrets manager exactly as
+      # they do today, and a missing key still fails startup loudly — see config/JwtConfig.
+      # ---------------------------------------------------------------------------------------
+      private-key-pem: |
+        -----BEGIN PRIVATE KEY-----
+        MIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQC7wZXSI1Lr6Pq/
+        jntc1U7xtkZscbJmIzWQ/ZQoa8BEw16ewmGfqicSsUL+s3052q2ncgBXYv8uA/Lg
+        wRd7XNY1lgU2v2ugNPCSN70f6ar6M6cENcRudiQxFh0fUQD07JBxNQQo/me/wwit
+        4KGlClHVI1VSsG3Mcjik3lDLIdS9Rix5+PVz2qPM3wCEpLZ8jo9IQfWDRhSWdXjQ
+        2O8XO3emEtdH+aBSROLLLgWsXJbdZvXrmdcHVRBOmdQfJclRzTCyI8uELHrYzkox
+        lHEed+cLmxeg8BEpC7zGVzkT6YNDic2baOM+wCZcbKTKv1vzJaUsOdkxbcZJP0Sc
+        iMUVnfedAgMBAAECgf9CvY2EJQpU0XxQm1U+qpRlV2WxJrlDlUB1Sa5gr+yohMod
+        pPsOxm0dN+WYpDTfW9xeqSd16LrMoJq1Se4O6/E5Gxq/W0vmpurdDvMrZORiC/pS
+        hMpOebBjwniXqTOt3Gl71FymNcirYai0JiVPhVuRZ/3sZsqg4flAocYWbvAwVyTH
+        B0X9S7dLdzj/pJVtAYLQuRYpTCHusioYesEviTrEsSV0SVR7R6FRkhUxu2H2EP5W
+        RZ8vX3SBfPmlTmvqCHpcNsUhDTZDwFSyDMmhoKf4niyI6dHyFKesEoNo04aDFm0N
+        SBssMHNVn+vHXhua++PBkOfUBeMrBi+dqiteDfUCgYEA8wTG9LsSOqovDeTekYVx
+        +dacmnA7IpasbrHe6Qbi+6uuShUognIb2guIawi1+LslpxN6jQNgbtZ3/zIefo7W
+        5PUiILrj9OTLDXGZPOgeQDLKPEEbP4Hbafhlb054dDVXOep3H7DlrKHqLA4cZmZ5
+        tBHFGvckwVGwEcxzKvpiJCsCgYEAxckbWrGOKZWES1cCZXmsO+zEk6nf67nwJtbV
+        358AG3k097AxXztHqjrcvQ8StYCj5Z8cl3/AMUh3r/pNbrZuKN+hpwIMfJ+4a1Ey
+        G8pH9r658XNHKUIxcnHgYyQieQE4YKlTx+cLXB+Socy0KENFRjruqW0fnyeh5Q5k
+        +aoTh1cCgYEAtZQ0NFgy3rKaRf9kbccPymWYzaxeAxIh9PPiYqtKnlFBAQmeIxmv
+        xdQoMhFoJllvYM8lGogTXb3SG1QPhPClkJ24ykvaV/k73ueqX9/v+nf4s9zRxzn3
+        /84hvHEdf3b7ncKbD4rVkY/JsPE6NykKdolwhR100R2AOUxSISLEgdECgYBYUpBG
+        ldeYNk6XnklRq14AfKDkGA4IpEXb8kAb1lMj8aJ3oVTK5BwCprqAKsT+DG4kUkNg
+        XAold+kKysndUNYspoD3pXCSDnk6Y03vHwu34kAC1KnIgOi35KaBX1eNlb/pWnQx
+        Zrmp7+d5HYKuICxFSnfdbP+cAQTI1v68hviljQKBgA9Itk2YXaGaD/0p3j+jVY9U
+        RRn54qBJ2uGhumMFhvfeg2gZJykvVBClndDsHqRBi8aGZLk0FSLXbSo91x1mvoTZ
+        elDI5t3kqCgyL2E9ZJy9x9GCyZ4zIzajim4bf0EzLkhY3jCX5yIx2swQGM3u0opz
+        KQMw2lv7FHjXg+U5TL+z
+        -----END PRIVATE KEY-----
+      public-key-pem: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu8GV0iNS6+j6v457XNVO
+        8bZGbHGyZiM1kP2UKGvARMNensJhn6onErFC/rN9Odqtp3IAV2L/LgPy4MEXe1zW
+        NZYFNr9roDTwkje9H+mq+jOnBDXEbnYkMRYdH1EA9OyQcTUEKP5nv8MIreChpQpR
+        1SNVUrBtzHI4pN5QyyHUvUYsefj1c9qjzN8AhKS2fI6PSEH1g0YUlnV40NjvFzt3
+        phLXR/mgUkTiyy4FrFyW3Wb165nXB1UQTpnUHyXJUc0wsiPLhCx62M5KMZRxHnfn
+        C5sXoPARKQu8xlc5E+mDQ4nNm2jjPsAmXGykyr9b8yWlLDnZMW3GST9EnIjFFZ33
+        nQIDAQAB
+        -----END PUBLIC KEY-----
 
 logging:
   level:

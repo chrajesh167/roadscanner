@@ -107,10 +107,16 @@ design docs in this bootstrap, made for build-correctness reasons.
 
 **JWT signing keys are configuration, never source.** Per `security-design.md`, the RS256 pair
 arrives as PEM via `roadscanner.security.jwt.private-key-pem` / `.public-key-pem` (sourced from
-the secrets manager in deployed environments — see `application-dev.yml`). The `local` and
-`test` profiles instead set `roadscanner.security.jwt.ephemeral-keys: true`, which generates a
-throwaway pair at startup with a loud warning; a deployed profile with neither configured
-fails startup deliberately. Generate a real pair with:
+the secrets manager in deployed environments — see `application-dev.yml`). The `test` profile
+instead sets `roadscanner.security.jwt.ephemeral-keys: true`, which generates a throwaway pair at
+startup with a loud warning; a deployed profile with neither configured fails startup
+deliberately.
+
+The `local` profile is the one exception to "never source": it carries a fixed, clearly-labelled
+**development-only** pair, because every verifying service's `application-local.yml` holds the
+public half and a locally-running stack is unusable unless all of them trust the same key. That
+pair is worthless by construction — it signs nothing outside a developer's machine, and no
+deployed profile can reach it. Generate a real pair with:
 
 ```bash
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
