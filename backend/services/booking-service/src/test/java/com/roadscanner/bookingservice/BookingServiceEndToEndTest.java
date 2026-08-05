@@ -7,6 +7,7 @@ import com.roadscanner.bookingservice.testsupport.TestcontainersConfiguration;
 import com.roadscanner.bookingservice.testsupport.security.TestJwtIssuer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,6 +78,18 @@ class BookingServiceEndToEndTest {
         PROVIDER_INTEGRATION_SERVICE.stop();
     }
 
+    /**
+     * The stub servers are static, so without this every test's registrations would survive into
+     * the next one. Two tests stubbing the same path then differ only by which happened to register
+     * last — a dependency on execution order that is invisible until it breaks. Each test declares
+     * the stubs it needs and starts from nothing.
+     */
+    @BeforeEach
+    void resetStubs() {
+        INVENTORY_SERVICE.resetAll();
+        PROVIDER_INTEGRATION_SERVICE.resetAll();
+    }
+
     @DynamicPropertySource
     static void stubBaseUrls(DynamicPropertyRegistry registry) {
         registry.add("roadscanner.booking.inventory-service.base-url", INVENTORY_SERVICE::baseUrl);
@@ -116,7 +129,22 @@ class BookingServiceEndToEndTest {
         }
     }
 
-    private void stubProviderAuthenticateAndBlock() {
+    /**
+     * Stubs the provider session and seat-block calls, issuing a <strong>fresh block reference on
+     * every invocation</strong>.
+     *
+     * <p>It has to be fresh. {@code provider_block_reference} is {@code UNIQUE} on both
+     * {@code seat_holds} and {@code bookings} (V1__create_booking_tables.sql), and the schema is
+     * right to enforce that — one provider-side reservation must never back two local records.
+     * A constant here meant the second test in the class to reach {@code POST /api/v1/bookings}
+     * collided on that constraint, so its booking was never created and the rest of the test
+     * asserted against a null id. The database was behaving correctly; the fixture was not.
+     *
+     * @return the block reference this stub will hand back, so a caller can assert on it
+     */
+    private String stubProviderAuthenticateAndBlock() {
+        String blockReference = "block-ref-" + UUID.randomUUID();
+
         PROVIDER_INTEGRATION_SERVICE.stubFor(post(urlPathMatching("/internal/api/v1/providers/MOCK/sessions"))
                 .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json").withBody("""
                         {"sessionId":"%s","providerType":"MOCK","expiresAt":"2099-01-01T00:00:00Z"}
@@ -124,10 +152,12 @@ class BookingServiceEndToEndTest {
         PROVIDER_INTEGRATION_SERVICE.stubFor(post(urlPathMatching(
                         "/internal/api/v1/providers/MOCK/sessions/[^/]+/trips/MOCK-TRIP-1/seat-blocks"))
                 .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json").withBody("""
-                        {"reservationId":"res-1","providerBlockReference":"block-ref-1","providerTripId":"MOCK-TRIP-1",
+                        {"reservationId":"%s","providerBlockReference":"%s","providerTripId":"MOCK-TRIP-1",
                          "seatNumbers":["L1"],"status":"BLOCKED","blockedAt":"2026-08-01T00:00:00Z",
                          "expiresAt":"2099-01-01T00:00:00Z"}
-                        """)));
+                        """.formatted(UUID.randomUUID(), blockReference))));
+
+        return blockReference;
     }
 
     @Test
@@ -174,17 +204,27 @@ class BookingServiceEndToEndTest {
                 new HttpEntity<>(Map.of("tripId", tripId.toString(), "seatNumbers", List.of("L1")),
                         authHeaders(travelerId)),
                 Map.class);
+        assertThat(holdResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String seatHoldId = (String) holdResponse.getBody().get("seatHoldId");
+
         ResponseEntity<Map> createResponse = rest.exchange("/api/v1/bookings", HttpMethod.POST,
                 new HttpEntity<>(Map.of("seatHoldId", seatHoldId, "passengers",
                         List.of(Map.of("fullName", "Jane Doe", "age", 30, "gender", "F", "seatNumber", "L1"))),
                         authHeaders(travelerId)),
                 Map.class);
+        // Asserted before the request under test runs. Without it a failed setup leaves bookingId
+        // null, the URL below becomes /api/v1/bookings/null, and the 400 that comes back is a
+        // parsing error being read as an authorization result — which is exactly how this test
+        // failed while appearing to be about visibility.
+        assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String bookingId = (String) createResponse.getBody().get("bookingId");
+        assertThat(bookingId).isNotNull();
 
         ResponseEntity<Map> forbidden = rest.exchange("/api/v1/bookings/" + bookingId, HttpMethod.GET,
                 new HttpEntity<>(authHeaders(UUID.randomUUID())), Map.class);
 
+        // 404, not 403: a booking the caller doesn't own must not be distinguishable from one that
+        // doesn't exist (docs/services/booking-service/api-summary.md).
         assertThat(forbidden.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
