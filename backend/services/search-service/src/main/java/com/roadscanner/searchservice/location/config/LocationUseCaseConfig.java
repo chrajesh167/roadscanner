@@ -4,6 +4,10 @@ import com.roadscanner.searchservice.location.application.usecase.CreateLocation
 import com.roadscanner.searchservice.location.application.usecase.DisableLocationService;
 import com.roadscanner.searchservice.location.application.usecase.GetLocationService;
 import com.roadscanner.searchservice.location.application.usecase.GetProviderMappingService;
+import com.roadscanner.searchservice.location.application.usecase.ManageProviderMappingsService;
+import com.roadscanner.searchservice.location.application.usecase.SearchProviderMappingsService;
+import com.roadscanner.searchservice.location.domain.port.in.ManageProviderMappings;
+import com.roadscanner.searchservice.location.domain.port.in.SearchProviderMappings;
 import com.roadscanner.searchservice.location.application.usecase.SearchLocationsService;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
 import com.roadscanner.searchservice.location.application.usecase.SearchPlaceSuggestionsService;
@@ -79,6 +83,25 @@ public class LocationUseCaseConfig {
     public GetProviderMapping getProviderMapping(LocationRepository locationRepository,
                                                  ProviderLocationMappingRepository mappingRepository) {
         return new GetProviderMappingService(locationRepository, mappingRepository);
+    }
+
+    /**
+     * Authoring the translation layer. Takes {@link LocationRepository} so it can refuse a mapping
+     * for a location that does not exist — a mapping translates a place the catalogue already
+     * holds, and never brings one into being.
+     */
+    @Bean
+    public ManageProviderMappings manageProviderMappings(LocationRepository locationRepository,
+                                                          ProviderLocationMappingRepository mappingRepository,
+                                                          Clock locationClock) {
+        return new ManageProviderMappingsService(locationRepository, mappingRepository, locationClock);
+    }
+
+    /** The administrative listing, which resolves each mapping against the location it translates. */
+    @Bean
+    public SearchProviderMappings searchProviderMappings(ProviderLocationMappingRepository mappingRepository,
+                                                          LocationRepository locationRepository) {
+        return new SearchProviderMappingsService(mappingRepository, locationRepository);
     }
 
     /**

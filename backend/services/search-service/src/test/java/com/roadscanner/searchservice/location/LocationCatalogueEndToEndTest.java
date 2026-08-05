@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,9 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * adapter, use cases, JPA adapter, and the V2 migration work together rather than each in
  * isolation.
  *
- * <p>Also asserts, at the seam Sprint 3 will build on, that provider identifiers resolve
- * <em>in-process only</em>: {@link GetProviderMapping} answers, while nothing on the HTTP surface
- * ever emits a provider id.
+ * <p>Also asserts where provider identifiers are allowed to surface. {@link GetProviderMapping}
+ * answers in-process for the integration boundary, and the administrative
+ * {@code /api/v1/provider-mappings} routes expose them to an operator under {@code ROLE_ADMIN} —
+ * but no traveller-facing response or schema carries one.
  *
  * <p>No {@code @Transactional} here on purpose — a rollback would hide exactly the commit-time
  * behaviour (constraints, generated defaults) this test exists to prove. Each test therefore uses
@@ -384,11 +386,76 @@ class LocationCatalogueEndToEndTest {
                         "Replace a location (admin)", "Withdraw a location (admin)")
                 .contains("LocationRequest", "LocationResponse", "LocationSummary", "AutocompleteResponse");
 
-        // The provider-mapping port is deliberately in-process: no route, and no provider field
-        // on any published schema. (The word "provider" does appear in prose — DELETE explains
-        // that provider mappings reference the row — so assert on the identifiers, not the text.)
-        assertThat(spec).doesNotContain("/api/v1/providers", "ProviderLocationMapping",
-                "providerCityId", "providerStationId", "providerStationName");
+        // The administrative translation layer is published too — it is an API an operator's
+        // console consumes, and an undocumented admin route is as invisible as an undocumented
+        // public one.
+        assertThat(spec).contains("\"/api/v1/provider-mappings\"", "\"/api/v1/provider-mappings/{id}\"",
+                        "\"/api/v1/provider-mappings/unmapped-locations\"")
+                .contains("ProviderMappingRequest", "ProviderMappingPage");
+    }
+
+    /**
+     * Provider identifiers exist in the spec now — but only in the admin shapes.
+     *
+     * <p>Asserted per schema rather than over the whole document, because the blunter "the word
+     * never appears" check stopped being the invariant the moment the admin surface shipped. The
+     * rule that actually matters is unchanged: nothing a traveller can reach speaks a provider's
+     * vocabulary, so it is the traveller-facing schemas that are checked. {@code ProviderTrip} and
+     * {@code SearchResultResponse} are deliberately excluded — federated search results name their
+     * provider by design.
+     */
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void travellerFacingSchemasCarryNoProviderIdentifiers() {
+        Map<String, Object> spec = rest.getForObject("/v3/api-docs", Map.class);
+
+        for (String schema : List.of("LocationResponse", "LocationSummary", "AutocompleteResponse",
+                "PlaceSuggestion", "PlaceAutocompleteResponse")) {
+            assertThat(schemaProperties(spec, schema))
+                    .as("%s must expose no provider-shaped field", schema)
+                    .noneMatch(property -> property.toLowerCase().startsWith("provider"));
+        }
+
+        // The admin shape is where they are allowed to live, and it does carry them — otherwise
+        // the assertion above would pass simply because nothing anywhere exposes them.
+        assertThat(schemaProperties(spec, "ProviderMapping"))
+                .contains("providerCityId", "providerStationId", "providerStationName");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<String> schemaProperties(Map<String, Object> spec, String schemaName) {
+        Map<String, Object> schemas =
+                (Map<String, Object>) ((Map<String, Object>) spec.get("components")).get("schemas");
+        Map<String, Object> schema = (Map<String, Object>) schemas.get(schemaName);
+        assertThat(schema).as("schema %s is missing from the published spec", schemaName).isNotNull();
+
+        Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+        return properties == null ? Set.of() : properties.keySet();
+    }
+
+    @Test
+    void theProviderMappingSurfaceIsAdminOnlyIncludingItsReads() {
+        // Stricter than the location catalogue, whose GETs are public: these are the only
+        // responses in the service that carry a provider's own identifiers.
+        assertThat(rest.getForEntity("/api/v1/provider-mappings", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/provider-mappings/{id}", String.class, UUID.randomUUID())
+                .getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(rest.getForEntity("/api/v1/provider-mappings/unmapped-locations?provider=FLIXBUS",
+                String.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        HttpEntity<Void> traveler = new HttpEntity<>(bearer(tokens.issue(UUID.randomUUID(), "TRAVELER")));
+        assertThat(rest.exchange("/api/v1/provider-mappings", HttpMethod.GET, traveler, String.class)
+                .getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+
+        assertThat(rest.exchange("/api/v1/provider-mappings", HttpMethod.GET, adminRequest(), String.class)
+                .getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    private static HttpHeaders bearer(String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        return headers;
     }
 
     @Test
