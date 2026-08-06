@@ -4,6 +4,7 @@ import com.roadscanner.providerintegrationservice.adapter.in.rest.filter.Correla
 import com.roadscanner.providerintegrationservice.domain.exception.BookingFailedException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderAuthenticationException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderIntegrationException;
+import com.roadscanner.providerintegrationservice.domain.exception.ProviderBookingNotFoundException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotSupportedException;
 import com.roadscanner.providerintegrationservice.domain.exception.DuplicateProviderException;
 import com.roadscanner.providerintegrationservice.domain.exception.ProviderNotFoundException;
@@ -80,6 +81,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("Malformed request value on {}: {}", request.getRequestURI(), ex.getMessage());
         return respond(HttpStatus.BAD_REQUEST, "Invalid request", request);
+    }
+
+    @ExceptionHandler(ProviderBookingNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProviderBookingNotFound(ProviderBookingNotFoundException ex,
+                                                                       HttpServletRequest request) {
+        log.info("Unknown provider order on {}: {}", request.getRequestURI(), ex.getMessage());
+        return respond(HttpStatus.NOT_FOUND, "No such provider order", request);
     }
 
     @ExceptionHandler(ProviderNotSupportedException.class)

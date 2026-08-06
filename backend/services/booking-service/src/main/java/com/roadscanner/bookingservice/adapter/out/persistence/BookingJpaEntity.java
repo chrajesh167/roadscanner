@@ -67,6 +67,15 @@ public class BookingJpaEntity {
     @Column(name = "fare_amount", nullable = false, updatable = false, precision = 12, scale = 2)
     private BigDecimal fareAmount;
 
+    @Column(name = "contact_phone", nullable = false, updatable = false)
+    private String contactPhone;
+
+    @Column(name = "contact_email", nullable = false, updatable = false)
+    private String contactEmail;
+
+    @Column(name = "contact_communication_preference", nullable = false, updatable = false)
+    private String contactCommunicationPreference;
+
     @Column(name = "fare_currency", nullable = false, updatable = false)
     private String fareCurrency;
 
@@ -120,7 +129,8 @@ public class BookingJpaEntity {
 
     BookingJpaEntity(UUID id, UUID travelerId, UUID tripId, Instant tripDepartureTime, String providerType,
                       String providerTripId, String providerBlockReference, Instant holdExpiresAt,
-                      String providerBookingReference, List<PassengerEmbeddable> passengers, BigDecimal fareAmount,
+                      String providerBookingReference, List<PassengerEmbeddable> passengers, String contactPhone,
+                      String contactEmail, String contactCommunicationPreference, BigDecimal fareAmount,
                       String fareCurrency, String status, String cancellationReason, boolean supportFlagged,
                       String paymentReference, String ticketProviderTicketId, String ticketFormat,
                       byte[] ticketContent, Instant ticketIssuedAt, Instant createdAt, Instant confirmedAt,
@@ -135,6 +145,9 @@ public class BookingJpaEntity {
         this.holdExpiresAt = holdExpiresAt;
         this.providerBookingReference = providerBookingReference;
         this.passengers = new ArrayList<>(passengers);
+        this.contactPhone = contactPhone;
+        this.contactEmail = contactEmail;
+        this.contactCommunicationPreference = contactCommunicationPreference;
         this.fareAmount = fareAmount;
         this.fareCurrency = fareCurrency;
         this.status = status;
@@ -207,6 +220,18 @@ public class BookingJpaEntity {
 
     public List<PassengerEmbeddable> getPassengers() {
         return passengers;
+    }
+
+    public String getContactPhone() {
+        return contactPhone;
+    }
+
+    public String getContactEmail() {
+        return contactEmail;
+    }
+
+    public String getContactCommunicationPreference() {
+        return contactCommunicationPreference;
     }
 
     public BigDecimal getFareAmount() {

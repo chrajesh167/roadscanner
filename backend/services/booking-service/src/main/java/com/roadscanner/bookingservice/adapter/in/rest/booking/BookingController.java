@@ -62,8 +62,7 @@ class BookingController {
             throw new AccessDeniedException("Only travelers may create a booking");
         }
         CreateBooking.Result result = createBooking.create(new CreateBooking.Command(requester.requesterId(),
-                new SeatHoldId(request.seatHoldId()),
-                request.passengers().stream().map(PassengerRequest::toCommand).toList()));
+                new SeatHoldId(request.seatHoldId()), request.contact().toDomain()));
         return CreateBookingResponse.from(result);
     }
 

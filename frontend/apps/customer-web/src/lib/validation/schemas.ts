@@ -47,27 +47,50 @@ export const searchSchema = z.object({
 });
 export type SearchValues = z.infer<typeof searchSchema>;
 
-// booking-service PassengerRequest: fullName @NotBlank, age @Min(1) @Max(120),
-// gender @NotBlank, seatNumber @NotBlank
+// booking-service HoldPassengerRequest: firstName/lastName @NotBlank, birthDate @NotNull @Past,
+// gender @NotBlank (male|female), seatNumber @NotBlank.
+//
+// The name is collected in two parts rather than one because that is what the provider prints on
+// the travel document, and no split rule applied to a display name is right for every real name.
 export const passengerSchema = z.object({
-  fullName: z
+  firstName: z
     .string()
     .trim()
-    .min(2, 'Enter the full name as printed on their ID')
+    .min(1, 'Enter their given name as printed on their ID')
     .max(120, 'That is too long'),
-  // The field registers with `valueAsNumber`, so this stays a plain number schema — `z.coerce`
-  // would split the resolver's input/output types and an empty input arrives as NaN either way.
-  age: z
-    .number({ message: 'Enter an age' })
-    .int('Enter a whole number')
-    .min(1, 'Age must be at least 1')
-    .max(120, 'Age must be 120 or below'),
-  gender: z.string().min(1, 'Select a gender'),
+  lastName: z
+    .string()
+    .trim()
+    .min(1, 'Enter their family name as printed on their ID')
+    .max(120, 'That is too long'),
+  // A date input yields `yyyy-MM-dd` or an empty string; the backend takes the same ISO form.
+  birthDate: z
+    .string()
+    .min(1, 'Enter their date of birth')
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date')
+    .refine((value) => Date.parse(value) < Date.now(), 'Date of birth must be in the past'),
+  // Only the two values the provider accepts. A third option here would be rejected downstream at
+  // confirmation — after the traveller had already paid.
+  gender: z.enum(['male', 'female'], { message: 'Select a gender' }),
   seatNumber: z.string().min(1),
+});
+
+// booking-service ContactRequest: phone @NotBlank, email @NotBlank @Email.
+export const contactSchema = z.object({
+  // Kept as entered, country code included: the provider wants an E.164-style number and this app
+  // cannot guess which country a bare national number belongs to.
+  phone: z
+    .string()
+    .trim()
+    .min(1, 'Enter a phone number')
+    .regex(/^\+?[0-9\s-]{8,20}$/, 'Include the country code, e.g. +91 98765 43210'),
+  email: z.string().trim().min(1, 'Enter an email address').email('Enter a valid email address'),
+  communicationPreference: z.enum(['email', 'sms']),
 });
 
 export const passengersFormSchema = z.object({
   passengers: z.array(passengerSchema).min(1),
+  contact: contactSchema,
 });
 export type PassengersFormValues = z.infer<typeof passengersFormSchema>;
 

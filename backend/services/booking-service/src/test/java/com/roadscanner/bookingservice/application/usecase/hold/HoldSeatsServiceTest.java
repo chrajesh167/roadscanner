@@ -2,6 +2,7 @@ package com.roadscanner.bookingservice.application.usecase.hold;
 
 import com.roadscanner.bookingservice.domain.exception.TripNotBookableException;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
+import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.TripId;
 import com.roadscanner.bookingservice.domain.port.in.HoldSeats;
 import com.roadscanner.bookingservice.domain.port.out.InventoryClient;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,7 +48,7 @@ class HoldSeatsServiceTest {
     void holdsSeatsAndPersistsASeatHoldCapturingTripAndFareFacts() {
         TripId tripId = bookableTrip();
 
-        HoldSeats.Result result = service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of("L1")));
+        HoldSeats.Result result = service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1"))));
 
         assertThat(result.seatNumbers()).containsExactly("L1");
         assertThat(seatHoldRepository.findById(result.seatHoldId())).isPresent();
@@ -62,7 +64,7 @@ class HoldSeatsServiceTest {
                 BigDecimal.valueOf(500), "INR", true));
         inventoryClient.providerMappingResult = id -> Optional.empty();
 
-        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of("L1"))))
+        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1")))))
                 .isInstanceOf(TripNotBookableException.class);
     }
 
@@ -73,7 +75,7 @@ class HoldSeatsServiceTest {
                 NOW.plusSeconds(3600), NOW.plusSeconds(7200), "Acme Travels", "AC Sleeper", List.of(),
                 BigDecimal.valueOf(500), "INR", false));
 
-        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of("L1"))))
+        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1")))))
                 .isInstanceOf(TripNotBookableException.class);
     }
 
@@ -82,7 +84,7 @@ class HoldSeatsServiceTest {
         TripId tripId = new TripId(UUID.randomUUID());
         inventoryClient.tripResult = id -> Optional.empty();
 
-        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of("L1"))))
+        assertThatThrownBy(() -> service.hold(new HoldSeats.Command(UUID.randomUUID(), tripId, List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1")))))
                 .isInstanceOf(TripNotBookableException.class);
     }
 }

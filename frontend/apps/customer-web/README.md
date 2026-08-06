@@ -43,7 +43,7 @@ src/
     search/ search/results/
     trips/[tripId]/       trip detail
     trips/[tripId]/seats/ seat selection
-    booking/passengers/   passenger details
+    booking/passengers/   passenger details + delivery contact; places the seat hold
     booking/[bookingId]/payment/  payment
     booking/[bookingId]/success/  confirmation
     bookings/             history + [bookingId] detail

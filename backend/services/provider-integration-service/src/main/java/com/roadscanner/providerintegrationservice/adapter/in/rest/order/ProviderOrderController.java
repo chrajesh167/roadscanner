@@ -71,7 +71,7 @@ class ProviderOrderController {
                                 @PathVariable String providerOrderReference,
                                 @Valid @RequestBody CancelOrderRequest request) {
         CancelBooking.Result result = cancelBooking.cancel(new CancelBooking.Command(
-                new ProviderSessionId(sessionId), providerOrderReference, request.token(), request.reason()));
+                new ProviderSessionId(sessionId), providerOrderReference, request.reason()));
         return CancellationResponse.from(result.cancellation());
     }
 }

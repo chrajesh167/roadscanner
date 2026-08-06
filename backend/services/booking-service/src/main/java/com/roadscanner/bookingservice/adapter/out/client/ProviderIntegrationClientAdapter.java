@@ -2,6 +2,7 @@ package com.roadscanner.bookingservice.adapter.out.client;
 
 import com.roadscanner.bookingservice.domain.exception.SeatUnavailableException;
 import com.roadscanner.bookingservice.domain.exception.UpstreamServiceUnavailableException;
+import com.roadscanner.bookingservice.domain.model.Contact;
 import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
 import com.roadscanner.bookingservice.domain.port.out.ProviderIntegrationClient;
@@ -15,8 +16,10 @@ import org.springframework.web.client.RestClientException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -52,6 +55,8 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
             "/internal/api/v1/providers/{providerType}/sessions/{sessionId}/seat-blocks/{providerBlockReference}/booking";
     private static final String TICKET_PATH =
             "/internal/api/v1/providers/{providerType}/sessions/{sessionId}/bookings/{bookingReference}/ticket";
+    private static final String CANCEL_ORDER_PATH =
+            "/internal/api/v1/providers/{providerType}/sessions/{sessionId}/orders/{providerOrderReference}/cancel";
 
     private final RestClient restClient;
     private final Clock clock;
@@ -79,11 +84,11 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
     }
 
     @Override
-    public Reservation blockSeats(ProviderType providerType, String providerTripId, List<String> seatNumbers) {
+    public Reservation blockSeats(ProviderType providerType, String providerTripId, List<Passenger> passengers) {
         return withSession(providerType, sessionId -> {
             SeatReservationResponse response = restClient.post()
                     .uri(SEAT_BLOCKS_PATH, providerType.code(), sessionId, providerTripId)
-                    .body(new BlockSeatRequest(seatNumbers))
+                    .body(new BlockSeatRequest(passengers.stream().map(PassengerRequest::from).toList()))
                     .retrieve()
                     .body(SeatReservationResponse.class);
             if (response == null) {
@@ -106,37 +111,65 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
     }
 
     @Override
-    public BookingConfirmationView confirmBooking(ProviderType providerType, String providerTripId,
-                                                    String providerBlockReference, List<Passenger> passengers) {
+    public BookingConfirmationView confirmBooking(ProviderType providerType, String providerBlockReference,
+                                                    Contact contact, List<Passenger> passengers) {
         return withSession(providerType, sessionId -> {
-            List<PassengerRequest> passengerRequests = passengers.stream()
-                    .map(p -> new PassengerRequest(p.fullName(), p.age(), p.gender(), p.seatNumber()))
-                    .toList();
             BookingConfirmationResponse response = restClient.post()
                     .uri(CONFIRM_PATH, providerType.code(), sessionId, providerBlockReference)
-                    .body(new ConfirmBookingRequest(providerTripId, passengerRequests))
+                    .body(new ConfirmBookingRequest(ContactRequest.from(contact),
+                            passengers.stream().map(PassengerRequest::from).toList()))
                     .retrieve()
                     .body(BookingConfirmationResponse.class);
             if (response == null) {
                 throw new UpstreamServiceUnavailableException("provider-integration-service", "empty ConfirmBooking response");
             }
-            return new BookingConfirmationView(response.bookingReference(), response.confirmedAt());
+            return new BookingConfirmationView(response.bookingReference(), response.providerCheckoutReference(),
+                    response.confirmedAt());
         }, providerType, "confirm booking for block " + providerBlockReference);
     }
 
+    /**
+     * A 404 here means the provider does not issue downloadable tickets — FlixBus, for one,
+     * documents no such endpoint. That is a fact about the provider, not a failure of this call, so
+     * it resolves to an empty ticket rather than an exception the caller would read as an outage.
+     */
     @Override
-    public TicketView downloadTicket(ProviderType providerType, String providerBookingReference) {
+    public Optional<TicketView> downloadTicket(ProviderType providerType, String providerBookingReference) {
         return withSession(providerType, sessionId -> {
-            TicketResponse response = restClient.get()
-                    .uri(TICKET_PATH, providerType.code(), sessionId, providerBookingReference)
-                    .retrieve()
-                    .body(TicketResponse.class);
+            TicketResponse response;
+            try {
+                response = restClient.get()
+                        .uri(TICKET_PATH, providerType.code(), sessionId, providerBookingReference)
+                        .retrieve()
+                        .body(TicketResponse.class);
+            } catch (HttpClientErrorException.NotFound e) {
+                log.info("Provider {} issues no downloadable ticket for booking {} — confirming without one",
+                        providerType, providerBookingReference);
+                return Optional.empty();
+            }
             if (response == null) {
                 throw new UpstreamServiceUnavailableException("provider-integration-service", "empty DownloadTicket response");
             }
             byte[] content = Base64.getDecoder().decode(response.contentBase64());
-            return new TicketView(response.ticketId(), response.format(), content, response.issuedAt());
+            return Optional.of(new TicketView(response.ticketId(), response.format(), content, response.issuedAt()));
         }, providerType, "download ticket for booking " + providerBookingReference);
+    }
+
+    @Override
+    public CancellationView cancelBooking(ProviderType providerType, String providerBookingReference, String reason) {
+        return withSession(providerType, sessionId -> {
+            CancellationResponse response = restClient.put()
+                    .uri(CANCEL_ORDER_PATH, providerType.code(), sessionId, providerBookingReference)
+                    .body(new CancelOrderRequest(reason))
+                    .retrieve()
+                    .body(CancellationResponse.class);
+            if (response == null) {
+                throw new UpstreamServiceUnavailableException("provider-integration-service",
+                        "empty CancelBooking response");
+            }
+            return new CancellationView(response.providerOrderReference(), response.refundedAmount(),
+                    response.refundedCurrency(), response.cancelledAt());
+        }, providerType, "cancel provider order " + providerBookingReference);
     }
 
     // --- Session lifecycle ----------------------------------------------------------------
@@ -198,7 +231,15 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
     private record AuthenticateProviderResponse(UUID sessionId, String providerType, Instant expiresAt) {
     }
 
-    private record BlockSeatRequest(List<String> seatNumbers) {
+    /**
+     * The wire shapes below mirror {@code provider-integration-service}'s own request records
+     * field for field. They are the contract this service was getting wrong: it previously sent
+     * {@code {seatNumbers}} to block and {@code {providerTripId, passengers:[{fullName, age, ...}]}}
+     * to confirm, neither of which that service accepts. {@code BookingServiceEndToEndTest}
+     * now matches on the emitted JSON, and {@code HandlePaymentCompletedServiceTest} asserts what
+     * reaches the port, so the two cannot drift apart again unnoticed.
+     */
+    private record BlockSeatRequest(List<PassengerRequest> passengers) {
     }
 
     private record SeatReservationResponse(String reservationId, String providerBlockReference, String providerTripId,
@@ -209,15 +250,41 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
     private record ReleaseSeatResponse(boolean released) {
     }
 
-    private record PassengerRequest(String fullName, int age, String gender, String seatNumber) {
+    /** No token: {@code provider-integration-service} resolves it from the order it recorded. */
+    private record CancelOrderRequest(String reason) {
     }
 
-    private record ConfirmBookingRequest(String providerTripId, List<PassengerRequest> passengers) {
+    private record CancellationResponse(String providerOrderReference, BigDecimal refundedAmount,
+                                         String refundedCurrency, Instant cancelledAt) {
     }
 
+    private record PassengerRequest(String firstName, String lastName, LocalDate birthDate, String gender,
+                                     String seatNumber) {
+
+        static PassengerRequest from(Passenger passenger) {
+            return new PassengerRequest(passenger.firstName(), passenger.lastName(), passenger.birthDate(),
+                    passenger.gender(), passenger.seatNumber());
+        }
+    }
+
+    private record ContactRequest(String phone, String email, String communicationPreference) {
+
+        static ContactRequest from(Contact contact) {
+            return new ContactRequest(contact.phone(), contact.email(),
+                    contact.communicationPreference().wireValue());
+        }
+    }
+
+    /** No trip id — the provider reads it from the hold and rejects a caller-supplied one. */
+    private record ConfirmBookingRequest(ContactRequest contact, List<PassengerRequest> passengers) {
+    }
+
+    /** No order token: it stays inside {@code provider-integration-service}, which resolves it
+     * when this service asks for a cancellation by order reference. */
     private record BookingConfirmationResponse(String bookingReference, String reservationId, String providerTripId,
                                                  List<String> passengerNames, BigDecimal totalFareAmount,
-                                                 String totalFareCurrency, Instant confirmedAt) {
+                                                 String totalFareCurrency, String providerCheckoutReference,
+                                                 String providerOrderReference, Instant confirmedAt) {
     }
 
     private record TicketResponse(String ticketId, String bookingReference, String format, String contentBase64,

@@ -14,10 +14,9 @@ import { FadeIn } from '@/components/ui/motion';
 import { PageShell } from '@/components/layout/page-shell';
 import { FlowSteps } from '@/components/booking/flow-steps';
 import { SeatMap, SELECTABLE_STATUS } from '@/components/booking/seat-map';
-import { useHoldSeats, useSeatView } from '@/lib/hooks/use-bookings';
+import { useSeatView } from '@/lib/hooks/use-bookings';
 import { useTripDetail } from '@/lib/hooks/use-search';
 import { useBookingFlowStore } from '@/lib/store/booking-flow-store';
-import { ApiError } from '@/lib/api/client';
 import { formatMoney } from '@/lib/utils/format';
 
 const MAX_SEATS = 6;
@@ -28,10 +27,9 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
 
   const { data: seatView, isLoading, isError, error, refetch } = useSeatView(tripId);
   const { data: trip } = useTripDetail(tripId);
-  const holdSeats = useHoldSeats();
 
   const startFlow = useBookingFlowStore((state) => state.startFlow);
-  const setHold = useBookingFlowStore((state) => state.setHold);
+  const setSelectedSeats = useBookingFlowStore((state) => state.setSelectedSeats);
   const storedTrip = useBookingFlowStore((state) => state.trip);
 
   // Deep-linking straight here (or a refresh) leaves the flow without its trip — seed it.
@@ -66,38 +64,12 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
     });
   }
 
+  // No hold is placed here any more. A hold binds each traveller to their seat, so it cannot be
+  // requested until the passenger names exist — the passenger screen places it on submit.
   function confirmSelection() {
     if (selected.length === 0) return;
-
-    holdSeats.mutate(
-      { tripId, seatNumbers: selected },
-      {
-        onSuccess: (hold) => {
-          setHold({
-            seatHoldId: hold.seatHoldId,
-            seatNumbers: hold.seatNumbers,
-            expiresAt: hold.expiresAt,
-          });
-          router.push('/booking/passengers');
-        },
-        onError: (mutationError) => {
-          // 409 means someone else took a seat between render and submit — refetch so the map
-          // reflects reality instead of leaving a stale seat looking selectable.
-          if (mutationError instanceof ApiError && mutationError.status === 409) {
-            toast.error('Those seats just went', {
-              description: 'Someone else booked one of them. We have refreshed the map.',
-            });
-            setSelected([]);
-            void refetch();
-            return;
-          }
-          toast.error('Could not hold those seats', {
-            description:
-              mutationError instanceof Error ? mutationError.message : 'Please try again.',
-          });
-        },
-      },
-    );
+    setSelectedSeats(selected);
+    router.push('/booking/passengers');
   }
 
   return (
@@ -210,22 +182,16 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
               <span className="text-h3 tabular-nums">{formatMoney(total, currency)}</span>
             </div>
 
-            <Button
-              size="lg"
-              full
-              disabled={selected.length === 0}
-              loading={holdSeats.isPending}
-              loadingText="Holding your seats"
-              onClick={confirmSelection}
-            >
-              Hold {selected.length > 0 ? `${selected.length} ` : ''}
+            <Button size="lg" full disabled={selected.length === 0} onClick={confirmSelection}>
+              Continue with {selected.length > 0 ? `${selected.length} ` : ''}
               {selected.length === 1 ? 'seat' : 'seats'}
               <ArrowRight />
             </Button>
 
             <p className="flex items-start gap-2 text-caption text-content-muted">
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Holding reserves your seats for a limited window while you enter passenger details.
+              These seats aren&apos;t reserved yet — we hold them once you&apos;ve entered
+              passenger details.
             </p>
           </Card>
         </FadeIn>
@@ -251,12 +217,7 @@ export function SeatSelectionView({ tripId }: { tripId: string }) {
                   {formatMoney(total, currency)}
                 </p>
               </div>
-              <Button
-                size="lg"
-                loading={holdSeats.isPending}
-                loadingText="Holding"
-                onClick={confirmSelection}
-              >
+              <Button size="lg" onClick={confirmSelection}>
                 Continue
                 <ArrowRight />
               </Button>

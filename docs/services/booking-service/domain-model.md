@@ -36,7 +36,10 @@ before any `Booking` exists:
 - `providerType`, `providerTripId` — captured from the trip's `ProviderMapping` at hold time
 - `providerBlockReference` — the reservation reference `provider-integration-service`'s
   `BlockSeat` returned
-- `seatNumbers` — the specific seats held
+- `passengers` — `List<Passenger>` (see below), each carrying the seat it occupies. The occupants
+  are named here rather than at booking creation because `BlockSeat` binds a traveler to a seat at
+  block time (it needs the gender to honour gender-restricted seats), so a bare list of seat
+  numbers cannot express the request. `seatNumbers` is derived from this list for responses.
 - `expiresAt` — the TTL `provider-integration-service` returned at hold time; this is the field
   `boundaries.md`'s "Known Gap: No Read-Only Reservation-Status Check" resolution depends on
 - `createdAt`
@@ -66,7 +69,11 @@ The one thing this service exists to own:
   that became this booking, so `booking-service` never needs to re-resolve `ProviderMapping` to
   act on an existing booking
 - `providerBookingReference` — populated only once `ConfirmBooking` succeeds; `null` before then
-- `passengers` — `List<Passenger>` (see below), fixed at booking creation
+- `passengers` — `List<Passenger>` (see below), carried over from the `SeatHold` rather than
+  supplied again at booking creation, so a booking's travelers can never disagree with the ones its
+  seats are held for
+- `contact` — `Contact` value object (see below): where the ticket is delivered. One per booking,
+  not one per passenger
 - `fare` — amount + currency, captured from `inventory-service`'s `FareSnapshot` at hold time,
   same non-authoritative-snapshot posture `inventory-service` itself already uses for the same
   data; a booking's charged amount is what was quoted at hold time, not whatever the catalog
@@ -92,14 +99,38 @@ status, composed fresh on demand, never stored here), and anything about the pay
 transaction itself (gateway references and status live entirely in `payment-service`, per NFR-12
 — `booking-service` holds only an opaque reference to look one up, never the transaction detail).
 
-### `Passenger` (value object, embedded in `Booking`)
+### `Passenger` (value object, embedded in `SeatHold` and `Booking`)
 
-`fullName`, `age`, `gender`, `seatNumber` — **deliberately field-for-field identical** to
+`firstName`, `lastName`, `birthDate`, `gender`, `seatNumber` — field-for-field identical to
 `provider-integration-service`'s own `PassengerDetail`/`PassengerRequest` shape
 (`docs/services/provider-integration-service/domain-model.md`), the same "no translation needed
 at the boundary" discipline already established between `inventory-service`'s
 `CatalogTripEventMessage` and `search-service`'s `TripEventMessage`. `booking-service` passes this
-list straight through to `ConfirmBooking` without remapping field names.
+list straight through to `BlockSeat` and `ConfirmBooking` without remapping field names.
+
+This shape was previously `fullName`, `age`, `gender`, `seatNumber`, which this document described
+as identical to the provider contract. It was not, and had not been since the provider adapter was
+written — every `ConfirmBooking` call would have been rejected. **Neither missing field can be
+derived:** no split rule applied to a display name is right for every real name, and an age cannot
+produce the birth date a provider prints on a document that has to match an ID at boarding. Both
+are collected from the traveler, which is why the correction reaches `customer-web` rather than
+stopping at the adapter.
+
+`gender` is the provider's closed vocabulary (`male` / `female`) — the same terms seat maps use to
+express restrictions — not a free-text display label.
+
+### `Contact` (value object, embedded in `Booking`)
+
+`phone`, `email`, `communicationPreference` (`email` / `sms`) — where the provider sends the
+ticket, matching `provider-integration-service`'s `ContactRequest`.
+
+Mandatory rather than optional-with-a-fallback: the provider rejects a checkout without it, and
+substituting the traveler's account email would deliver a ticket somewhere nobody agreed it should
+go. `phone` is stored exactly as entered, country code included — the provider wants an E.164-style
+number and this service cannot guess which country a bare national number belongs to.
+
+Collected at booking creation rather than at hold time because that is when the provider needs it:
+the seat block cares who occupies a seat, the checkout cares where the ticket goes.
 
 ### `BookingStatus` (enum)
 

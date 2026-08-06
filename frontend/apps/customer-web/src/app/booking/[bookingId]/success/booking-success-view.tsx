@@ -113,8 +113,8 @@ export function BookingSuccessView({ bookingId }: { bookingId: string }) {
                 >
                   <span className="min-w-0 truncate text-body text-content">
                     {passenger.fullName}
-                    <span className="ml-2 text-caption text-content-muted">
-                      {passenger.age}, {passenger.gender.toLowerCase()}
+                    <span className="ml-2 text-caption capitalize text-content-muted">
+                      {passenger.gender.toLowerCase()}
                     </span>
                   </span>
                   <Badge tone="accent">Seat {passenger.seatNumber}</Badge>

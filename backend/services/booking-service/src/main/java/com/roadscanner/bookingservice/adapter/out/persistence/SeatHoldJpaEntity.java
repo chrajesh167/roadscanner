@@ -45,9 +45,8 @@ public class SeatHoldJpaEntity {
     private String providerBlockReference;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "seat_hold_seat_numbers", joinColumns = @JoinColumn(name = "seat_hold_id"))
-    @Column(name = "seat_number", nullable = false)
-    private List<String> seatNumbers = new ArrayList<>();
+    @CollectionTable(name = "seat_hold_passengers", joinColumns = @JoinColumn(name = "seat_hold_id"))
+    private List<PassengerEmbeddable> passengers = new ArrayList<>();
 
     @Column(name = "fare_amount", nullable = false, updatable = false, precision = 12, scale = 2)
     private BigDecimal fareAmount;
@@ -65,7 +64,7 @@ public class SeatHoldJpaEntity {
     }
 
     public SeatHoldJpaEntity(UUID id, UUID travelerId, UUID tripId, Instant tripDepartureTime, String providerType,
-                              String providerTripId, String providerBlockReference, List<String> seatNumbers,
+                              String providerTripId, String providerBlockReference, List<PassengerEmbeddable> passengers,
                               BigDecimal fareAmount, String fareCurrency, Instant expiresAt, Instant createdAt) {
         this.id = id;
         this.travelerId = travelerId;
@@ -74,7 +73,7 @@ public class SeatHoldJpaEntity {
         this.providerType = providerType;
         this.providerTripId = providerTripId;
         this.providerBlockReference = providerBlockReference;
-        this.seatNumbers = new ArrayList<>(seatNumbers);
+        this.passengers = new ArrayList<>(passengers);
         this.fareAmount = fareAmount;
         this.fareCurrency = fareCurrency;
         this.expiresAt = expiresAt;
@@ -109,8 +108,8 @@ public class SeatHoldJpaEntity {
         return providerBlockReference;
     }
 
-    public List<String> getSeatNumbers() {
-        return seatNumbers;
+    public List<PassengerEmbeddable> getPassengers() {
+        return passengers;
     }
 
     public BigDecimal getFareAmount() {

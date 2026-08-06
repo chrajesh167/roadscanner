@@ -1,6 +1,7 @@
 package com.roadscanner.bookingservice.adapter.out.persistence;
 
 import com.roadscanner.bookingservice.domain.model.Fare;
+import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
 import com.roadscanner.bookingservice.domain.model.SeatHold;
 import com.roadscanner.bookingservice.domain.model.SeatHoldId;
@@ -14,6 +15,7 @@ import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -35,7 +37,9 @@ class SeatHoldRepositoryAdapterTest {
     private SeatHold newHold(String providerBlockReference, Instant expiresAt) {
         return SeatHold.create(SeatHoldId.generate(), UUID.randomUUID(), new TripId(UUID.randomUUID()),
                 T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", providerBlockReference,
-                List.of("L1", "L2"), new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), expiresAt, T0);
+                List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1"),
+                        new Passenger("Ravi", "Kumar", LocalDate.of(1988, 1, 2), "male", "L2")),
+                new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), expiresAt, T0);
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.roadscanner.bookingservice.domain.exception.BookingNotFoundException;
 import com.roadscanner.bookingservice.domain.model.Booking;
 import com.roadscanner.bookingservice.domain.model.BookingId;
 import com.roadscanner.bookingservice.domain.model.BookingStatus;
+import com.roadscanner.bookingservice.domain.model.Contact;
 import com.roadscanner.bookingservice.domain.model.Fare;
 import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -73,7 +75,8 @@ class BookingControllerTest {
     private Booking sampleBooking(UUID travelerId) {
         return Booking.create(BookingId.generate(), travelerId, new TripId(UUID.randomUUID()), T0.plusSeconds(3600),
                 new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", T0.plusSeconds(600),
-                List.of(new Passenger("Jane Doe", 30, "F", "L1")),
+                List.of(new Passenger("Jane", "Doe", LocalDate.of(1994, 3, 17), "F", "L1")),
+                new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
     }
 
@@ -84,7 +87,7 @@ class BookingControllerTest {
         when(createBooking.create(any())).thenReturn(new CreateBooking.Result(bookingId, BookingStatus.PENDING_PAYMENT));
 
         String body = """
-                {"seatHoldId":"%s","passengers":[{"fullName":"Jane Doe","age":30,"gender":"F","seatNumber":"L1"}]}
+                {"seatHoldId":"%s","contact":{"phone":"+919876543210","email":"asha@example.com","communicationPreference":"email"}}
                 """.formatted(UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/bookings").with(traveler(travelerId))
@@ -103,7 +106,7 @@ class BookingControllerTest {
                 "duplicate key value violates unique constraint \"uq_bookings_provider_block_reference\""));
 
         String body = """
-                {"seatHoldId":"%s","passengers":[{"fullName":"Jane Doe","age":30,"gender":"F","seatNumber":"L1"}]}
+                {"seatHoldId":"%s","contact":{"phone":"+919876543210","email":"asha@example.com","communicationPreference":"email"}}
                 """.formatted(UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/bookings").with(traveler(UUID.randomUUID()))
@@ -120,6 +123,8 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/v1/bookings/{id}", booking.id().value()).with(traveler(travelerId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bookingId").value(booking.id().toString()))
+                .andExpect(jsonPath("$.passengers[0].firstName").value("Jane"))
+                .andExpect(jsonPath("$.passengers[0].lastName").value("Doe"))
                 .andExpect(jsonPath("$.passengers[0].fullName").value("Jane Doe"));
     }
 

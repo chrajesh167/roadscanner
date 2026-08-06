@@ -1,6 +1,7 @@
 package com.roadscanner.bookingservice.adapter.out.persistence;
 
 import com.roadscanner.bookingservice.domain.model.Fare;
+import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
 import com.roadscanner.bookingservice.domain.model.SeatHold;
 import com.roadscanner.bookingservice.domain.model.SeatHoldId;
@@ -19,7 +20,10 @@ final class SeatHoldMapper {
                 new ProviderType(entity.getProviderType()),
                 entity.getProviderTripId(),
                 entity.getProviderBlockReference(),
-                entity.getSeatNumbers(),
+                entity.getPassengers().stream()
+                        .map(p -> new Passenger(p.getFirstName(), p.getLastName(), p.getBirthDate(), p.getGender(),
+                                p.getSeatNumber()))
+                        .toList(),
                 new Fare(entity.getFareAmount(), Currency.getInstance(entity.getFareCurrency())),
                 entity.getExpiresAt(),
                 entity.getCreatedAt()
@@ -35,7 +39,10 @@ final class SeatHoldMapper {
                 hold.providerType().code(),
                 hold.providerTripId(),
                 hold.providerBlockReference(),
-                hold.seatNumbers(),
+                hold.passengers().stream()
+                        .map(p -> new PassengerEmbeddable(p.firstName(), p.lastName(), p.birthDate(), p.gender(),
+                                p.seatNumber()))
+                        .toList(),
                 hold.fare().amount(),
                 hold.fare().currency().getCurrencyCode(),
                 hold.expiresAt(),

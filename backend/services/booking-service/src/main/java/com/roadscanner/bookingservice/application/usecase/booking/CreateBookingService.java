@@ -1,6 +1,5 @@
 package com.roadscanner.bookingservice.application.usecase.booking;
 
-import com.roadscanner.bookingservice.domain.exception.PassengerSeatMismatchException;
 import com.roadscanner.bookingservice.domain.exception.SeatHoldExpiredException;
 import com.roadscanner.bookingservice.domain.exception.SeatHoldNotFoundException;
 import com.roadscanner.bookingservice.domain.model.Booking;
@@ -50,14 +49,14 @@ public class CreateBookingService implements CreateBooking {
             throw new SeatHoldExpiredException(hold.id());
         }
 
-        List<Passenger> passengers = command.passengers().stream()
-                .map(p -> new Passenger(p.fullName(), p.age(), p.gender(), p.seatNumber()))
-                .toList();
-        validateOnePassengerPerHeldSeat(hold, passengers);
+        // Taken from the hold, not from the caller: these travellers are the ones the provider
+        // already bound to these seats, and accepting a second list here would let a booking
+        // disagree with the reservation it is built on.
+        List<Passenger> passengers = hold.passengers();
 
         Booking booking = Booking.create(BookingId.generate(), command.travelerId(), hold.tripId(),
                 hold.tripDepartureTime(), hold.providerType(), hold.providerTripId(), hold.providerBlockReference(),
-                hold.expiresAt(), passengers, hold.fare(), now);
+                hold.expiresAt(), passengers, command.contact(), hold.fare(), now);
         bookingRepository.save(booking);
         seatHoldRepository.deleteById(hold.id());
         eventPublisher.publishBookingCreated(booking, now);
@@ -65,16 +64,4 @@ public class CreateBookingService implements CreateBooking {
         return new Result(booking.id(), booking.status());
     }
 
-    private void validateOnePassengerPerHeldSeat(SeatHold hold, List<Passenger> passengers) {
-        if (passengers.size() != hold.seatNumbers().size()) {
-            throw new PassengerSeatMismatchException(
-                    "Expected exactly one passenger per held seat: held " + hold.seatNumbers().size()
-                            + ", submitted " + passengers.size());
-        }
-        Set<String> heldSeats = Set.copyOf(hold.seatNumbers());
-        Set<String> passengerSeats = passengers.stream().map(Passenger::seatNumber).collect(java.util.stream.Collectors.toSet());
-        if (!heldSeats.equals(passengerSeats)) {
-            throw new PassengerSeatMismatchException("Passenger seat numbers do not match the held seats");
-        }
-    }
 }

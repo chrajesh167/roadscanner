@@ -4,6 +4,7 @@ import com.roadscanner.bookingservice.domain.model.Booking;
 import com.roadscanner.bookingservice.domain.model.BookingId;
 import com.roadscanner.bookingservice.domain.model.BookingStatus;
 import com.roadscanner.bookingservice.domain.model.CancellationReason;
+import com.roadscanner.bookingservice.domain.model.Contact;
 import com.roadscanner.bookingservice.domain.model.Fare;
 import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -41,13 +43,15 @@ class HandleTripCancelledServiceTest {
 
         Booking pending = Booking.create(BookingId.generate(), UUID.randomUUID(), tripId, T0.plusSeconds(3600),
                 new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", T0.plusSeconds(600),
-                List.of(new Passenger("A", 30, "F", "L1")),
+                List.of(new Passenger("A", "Traveller", LocalDate.of(1994, 3, 17), "F", "L1")),
+                new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
         bookingRepository.save(pending);
 
         Booking confirmed = Booking.create(BookingId.generate(), UUID.randomUUID(), tripId, T0.plusSeconds(3600),
                 new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-2", T0.plusSeconds(600),
-                List.of(new Passenger("B", 30, "F", "L2")),
+                List.of(new Passenger("B", "Traveller", LocalDate.of(1994, 3, 17), "F", "L2")),
+                new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
         confirmed.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         confirmed.associatePaymentReference("payment-ref-1");
@@ -56,7 +60,8 @@ class HandleTripCancelledServiceTest {
         // A booking on a different trip must not be touched.
         Booking otherTrip = Booking.create(BookingId.generate(), UUID.randomUUID(), new TripId(UUID.randomUUID()),
                 T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-3", T0.plusSeconds(600),
-                List.of(new Passenger("C", 30, "F", "L3")),
+                List.of(new Passenger("C", "Traveller", LocalDate.of(1994, 3, 17), "F", "L3")),
+                new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
         bookingRepository.save(otherTrip);
 

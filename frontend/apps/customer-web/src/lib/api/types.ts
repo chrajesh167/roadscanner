@@ -140,9 +140,26 @@ export interface SeatSelectionViewResponse {
   seats: SeatViewResponse[];
 }
 
+/**
+ * One traveller, in the shape the provider binds to a seat. `birthDate` is an ISO `yyyy-MM-dd`
+ * string and `gender` is `male` or `female` — the provider's closed vocabulary, not a display
+ * label.
+ */
+export interface PassengerRequest {
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  gender: 'male' | 'female';
+  seatNumber: string;
+}
+
+/**
+ * Holding seats now names their occupants: the provider binds a traveller to a seat when the
+ * block is placed, so a bare seat-number list can no longer express the request.
+ */
 export interface HoldSeatsRequest {
   tripId: string;
-  seatNumbers: string[];
+  passengers: PassengerRequest[];
 }
 
 export interface HoldSeatsResponse {
@@ -155,16 +172,20 @@ export interface ReleaseHoldResponse {
   released: boolean;
 }
 
-export interface PassengerRequest {
-  fullName: string;
-  age: number;
-  gender: string;
-  seatNumber: string;
+/** Where the ticket is delivered — one contact per booking, not per passenger. */
+export interface ContactRequest {
+  phone: string;
+  email: string;
+  communicationPreference: 'email' | 'sms';
 }
 
+/**
+ * Passengers are absent here on purpose: they were bound to their seats at hold time, and sending
+ * them again would invite a booking whose travellers disagree with the held seats.
+ */
 export interface CreateBookingRequest {
   seatHoldId: string;
-  passengers: PassengerRequest[];
+  contact: ContactRequest;
 }
 
 export type BookingStatus =
@@ -178,9 +199,12 @@ export interface CreateBookingResponse {
   status: string;
 }
 
+/** `fullName` is composed by the server from the parts; it is for display, never a source field. */
 export interface PassengerResponse {
+  firstName: string;
+  lastName: string;
   fullName: string;
-  age: number;
+  birthDate: string;
   gender: string;
   seatNumber: string;
 }

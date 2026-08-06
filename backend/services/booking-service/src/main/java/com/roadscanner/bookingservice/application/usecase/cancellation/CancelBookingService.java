@@ -20,8 +20,8 @@ import java.time.Instant;
  * Implements {@link CancelBooking} — the traveler-initiated half of
  * docs/services/booking-service/booking-state-machine.md's "Cancellation (Traveler-Initiated)".
  * If {@code PENDING_PAYMENT}: releases the hold, no refund needed. If {@code CONFIRMED}: checks
- * the (currently interim, full-refund-by-default) cancellation policy, requests a refund, and
- * attempts <strong>no provider-side reversal</strong> —
+ * the (currently interim, full-refund-by-default) cancellation policy, cancels the order with the
+ * provider that issued it, and only then requests a refund — closing
  * docs/services/booking-service/boundaries.md's "Known Gap: Post-Confirmation Cancellation".
  * Already-terminal bookings are a no-op (idempotent).
  */
@@ -63,6 +63,12 @@ public class CancelBookingService implements CancelBooking {
         } else if (previousStatus == BookingStatus.CONFIRMED) {
             OperatorCancellationPolicyClient.CancellationPolicy policy =
                     policyClient.getCancellationPolicy(booking.tripId());
+
+            // The provider is reversed first, and a failure here aborts the whole cancellation.
+            // Refunding a traveller for a seat the provider still considers sold is how
+            // RoadScanner ends up paying for a journey nobody takes.
+            cancelWithProvider(booking);
+
             booking.cancel(CancellationReason.TRAVELER_REQUESTED, now);
             bookingRepository.save(booking);
             BigDecimal refundAmount = policy.fullRefundEligible() ? null : policy.feeAmount();
@@ -73,6 +79,20 @@ public class CancelBookingService implements CancelBooking {
         // else: already CANCELLED or COMPLETED — idempotent no-op, no side effects, no event.
 
         return new Result(booking.status());
+    }
+
+    /**
+     * Reverses the confirmed order with the provider that issued it.
+     *
+     * <p>A booking with no provider reference never reached the provider, so there is nothing to
+     * reverse. Anything else propagates: this used to be documented as a known gap
+     * ("attempts no provider-side reversal"), which meant every traveller cancellation refunded
+     * the customer while leaving a live, paid order at the provider.
+     */
+    private void cancelWithProvider(Booking booking) {
+        booking.providerBookingReference().ifPresent(reference ->
+                providerIntegrationClient.cancelBooking(booking.providerType(), reference,
+                        "cancelled by traveller request"));
     }
 
     private boolean canCancel(Booking booking, RequesterContext requester) {

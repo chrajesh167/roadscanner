@@ -21,7 +21,13 @@ import { Separator, TBody, TD, TH, THead, TR, Table } from '@/components/ui/misc
 import { FadeIn } from '@/components/ui/motion';
 import { PageShell } from '@/components/layout/page-shell';
 import { useBooking, useCancelBooking, useTicket } from '@/lib/hooks/use-bookings';
-import { formatDateTime, formatMoney, humanizeEnum, shortId } from '@/lib/utils/format';
+import {
+  formatDateTime,
+  formatFullDate,
+  formatMoney,
+  humanizeEnum,
+  shortId,
+} from '@/lib/utils/format';
 
 /** Cancellable states: anything not already terminal. */
 const CANCELLABLE = new Set(['PENDING_PAYMENT', 'CONFIRMED']);
@@ -127,7 +133,7 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
                 <THead>
                   <TR>
                     <TH>Name</TH>
-                    <TH>Age</TH>
+                    <TH>Date of birth</TH>
                     <TH>Gender</TH>
                     <TH>Seat</TH>
                   </TR>
@@ -136,7 +142,7 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
                   {booking.passengers.map((passenger) => (
                     <TR key={`${passenger.seatNumber}-${passenger.fullName}`}>
                       <TD className="text-content">{passenger.fullName}</TD>
-                      <TD className="tabular-nums">{passenger.age}</TD>
+                      <TD className="tabular-nums">{formatFullDate(passenger.birthDate)}</TD>
                       <TD className="capitalize">{passenger.gender.toLowerCase()}</TD>
                       <TD>
                         <Badge tone="accent">{passenger.seatNumber}</Badge>

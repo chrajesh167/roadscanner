@@ -2,6 +2,7 @@ package com.roadscanner.bookingservice.application.usecase.hold;
 
 import com.roadscanner.bookingservice.domain.exception.SeatHoldNotFoundException;
 import com.roadscanner.bookingservice.domain.model.Fare;
+import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
 import com.roadscanner.bookingservice.domain.model.SeatHold;
 import com.roadscanner.bookingservice.domain.model.SeatHoldId;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -32,7 +34,7 @@ class ReleaseHoldServiceTest {
     void releasesAnOwnedHoldAndDeletesIt() {
         UUID travelerId = UUID.randomUUID();
         SeatHold hold = SeatHold.create(SeatHoldId.generate(), travelerId, new TripId(UUID.randomUUID()),
-                T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", List.of("L1"),
+                T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1")),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0.plusSeconds(600), T0);
         seatHoldRepository.save(hold);
 
@@ -46,7 +48,7 @@ class ReleaseHoldServiceTest {
     @Test
     void failsForAHoldOwnedBySomeoneElse() {
         SeatHold hold = SeatHold.create(SeatHoldId.generate(), UUID.randomUUID(), new TripId(UUID.randomUUID()),
-                T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", List.of("L1"),
+                T0.plusSeconds(3600), new ProviderType("MOCK"), "MOCK-TRIP-1", "block-ref-1", List.of(new Passenger("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1")),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0.plusSeconds(600), T0);
         seatHoldRepository.save(hold);
 

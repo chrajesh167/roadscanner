@@ -2,9 +2,9 @@ package com.roadscanner.bookingservice.domain.port.in;
 
 import com.roadscanner.bookingservice.domain.model.BookingId;
 import com.roadscanner.bookingservice.domain.model.BookingStatus;
+import com.roadscanner.bookingservice.domain.model.Contact;
 import com.roadscanner.bookingservice.domain.model.SeatHoldId;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -15,25 +15,23 @@ import java.util.UUID;
  * made here), and, if still valid, creates a {@code Booking} in {@code PENDING_PAYMENT},
  * consuming the hold. A hold token becomes <strong>at most one</strong> booking
  * (docs/architecture/booking-flow.md's idempotency requirement).
+ *
+ * <p><strong>Passengers are no longer supplied here.</strong> They were bound to seats when the
+ * hold was placed — the provider requires the occupant at block time — so taking them again would
+ * invite a booking whose travellers disagree with the ones the seats are actually held for. They
+ * are copied from the hold instead. What this step adds is the contact, which the provider needs
+ * only at checkout: where the ticket is sent.
  */
 public interface CreateBooking {
 
     Result create(Command command);
 
-    record Command(UUID travelerId, SeatHoldId seatHoldId, List<PassengerInput> passengers) {
+    record Command(UUID travelerId, SeatHoldId seatHoldId, Contact contact) {
         public Command {
             Objects.requireNonNull(travelerId, "travelerId must not be null");
             Objects.requireNonNull(seatHoldId, "seatHoldId must not be null");
-            if (passengers == null || passengers.isEmpty()) {
-                throw new IllegalArgumentException("passengers must not be empty");
-            }
-            passengers = List.copyOf(passengers);
+            Objects.requireNonNull(contact, "contact must not be null");
         }
-    }
-
-    /** Deliberately field-for-field identical to {@code provider-integration-service}'s
-     * {@code PassengerRequest} — see {@code domain.model.Passenger}'s Javadoc. */
-    record PassengerInput(String fullName, int age, String gender, String seatNumber) {
     }
 
     record Result(BookingId bookingId, BookingStatus status) {

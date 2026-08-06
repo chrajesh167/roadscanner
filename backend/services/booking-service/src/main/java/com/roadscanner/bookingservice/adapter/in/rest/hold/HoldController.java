@@ -45,7 +45,7 @@ class HoldController {
     HoldSeatsResponse hold(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody HoldSeatsRequest request) {
         RequesterContext requester = requireTraveler(jwt);
         HoldSeats.Result result = holdSeats.hold(new HoldSeats.Command(requester.requesterId(),
-                new TripId(request.tripId()), request.seatNumbers()));
+                new TripId(request.tripId()), request.toPassengers()));
         return HoldSeatsResponse.from(result);
     }
 
