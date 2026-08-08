@@ -20,6 +20,8 @@ roadscanner:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   provider-integration-service:
     base-url: ${PROVIDER_INTEGRATION_SERVICE_BASE_URL}
+  search-service:
+    base-url: ${SEARCH_SERVICE_BASE_URL}
 
 logging:
   level:

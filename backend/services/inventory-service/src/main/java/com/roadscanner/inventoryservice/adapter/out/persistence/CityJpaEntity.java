@@ -27,11 +27,20 @@ public class CityJpaEntity {
     @Column(name = "country", nullable = false)
     private String country;
 
+    /** Nullable: set administratively, and NULL until someone confirms which canonical location
+     * this city is. See {@code V3__link_cities_to_canonical_locations.sql}. */
+    @Column(name = "location_id")
+    private UUID locationId;
+
     protected CityJpaEntity() {
     }
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getLocationId() {
+        return locationId;
     }
 
     public String getName() {

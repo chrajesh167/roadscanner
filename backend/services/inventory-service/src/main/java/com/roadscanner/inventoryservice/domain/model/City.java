@@ -1,6 +1,8 @@
 package com.roadscanner.inventoryservice.domain.model;
 
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /** Structured catalog geography — new to the platform, per docs/services/inventory-service/domain-model.md.
  * Owned outright by this service, kept current via administrative catalog management, not
@@ -11,20 +13,33 @@ public final class City {
     private String name;
     private String state;
     private String country;
+    private final UUID locationId;
 
-    private City(CityId id, String name, String state, String country) {
+    private City(CityId id, String name, String state, String country, UUID locationId) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.name = requireNonBlank(name, "name");
         this.state = requireNonBlank(state, "state");
         this.country = requireNonBlank(country, "country");
+        this.locationId = locationId;
     }
 
     public static City create(CityId id, String name, String state, String country) {
-        return new City(id, name, state, country);
+        return new City(id, name, state, country, null);
     }
 
-    public static City reconstitute(CityId id, String name, String state, String country) {
-        return new City(id, name, state, country);
+    public static City reconstitute(CityId id, String name, String state, String country, UUID locationId) {
+        return new City(id, name, state, country, locationId);
+    }
+
+    /**
+     * The canonical RoadScanner location this city is, where an administrator has recorded one.
+     *
+     * <p>Absent means this city cannot be translated into any provider's vocabulary — the
+     * translation table is keyed by canonical location — so catalog sync skips it rather than
+     * falling back to a name a provider would reject or, worse, misread.
+     */
+    public Optional<UUID> locationId() {
+        return Optional.ofNullable(locationId);
     }
 
     private static String requireNonBlank(String value, String field) {

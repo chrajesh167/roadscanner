@@ -80,3 +80,8 @@ roadscanner:
   provider-integration-service:
     connect-timeout: PT2S
     read-timeout: PT5S
+  # search-service owns provider_location_mapping, the platform's single translation table. Base
+  # URL is profile-supplied, like every other cross-service address here.
+  search-service:
+    connect-timeout: PT2S
+    read-timeout: PT5S

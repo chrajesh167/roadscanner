@@ -18,6 +18,7 @@ import com.roadscanner.inventoryservice.domain.port.in.SynchronizeProviderCatalo
 import com.roadscanner.inventoryservice.domain.port.out.CatalogEventPublisher;
 import com.roadscanner.inventoryservice.domain.port.out.CityRepository;
 import com.roadscanner.inventoryservice.domain.port.out.ProviderIntegrationClient;
+import com.roadscanner.inventoryservice.domain.port.out.ProviderLocationResolutionClient;
 import com.roadscanner.inventoryservice.domain.port.out.ProviderMappingRepository;
 import com.roadscanner.inventoryservice.domain.port.out.RouteRepository;
 import com.roadscanner.inventoryservice.domain.port.out.SeatLayoutRepository;
@@ -31,7 +32,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Implements {@link SynchronizeProviderCatalog}. Reconciliation keys strictly on
@@ -53,6 +56,7 @@ public class SynchronizeProviderCatalogService implements SynchronizeProviderCat
     private final ProviderMappingRepository providerMappingRepository;
     private final SyncRecordRepository syncRecordRepository;
     private final ProviderIntegrationClient providerIntegrationClient;
+    private final ProviderLocationResolutionClient providerLocationResolutionClient;
     private final CatalogEventPublisher catalogEventPublisher;
     private final Clock clock;
     private final int syncWindowDays;
@@ -62,6 +66,7 @@ public class SynchronizeProviderCatalogService implements SynchronizeProviderCat
                                               ProviderMappingRepository providerMappingRepository,
                                               SyncRecordRepository syncRecordRepository,
                                               ProviderIntegrationClient providerIntegrationClient,
+                                              ProviderLocationResolutionClient providerLocationResolutionClient,
                                               CatalogEventPublisher catalogEventPublisher, Clock clock,
                                               int syncWindowDays) {
         this.routeRepository = routeRepository;
@@ -71,6 +76,7 @@ public class SynchronizeProviderCatalogService implements SynchronizeProviderCat
         this.providerMappingRepository = providerMappingRepository;
         this.syncRecordRepository = syncRecordRepository;
         this.providerIntegrationClient = providerIntegrationClient;
+        this.providerLocationResolutionClient = providerLocationResolutionClient;
         this.catalogEventPublisher = catalogEventPublisher;
         this.clock = clock;
         this.syncWindowDays = syncWindowDays;
@@ -103,6 +109,19 @@ public class SynchronizeProviderCatalogService implements SynchronizeProviderCat
         }
     }
 
+    /**
+     * Searches one route with the provider, in the provider's own vocabulary.
+     *
+     * <p>Both endpoints are translated to the provider's city ids before anything is asked of it.
+     * This used to send {@code origin.name()} and {@code destination.name()} — city names, where
+     * every provider's search takes an id it issued. FlixBus rejects those outright, so no trip
+     * could ever be synchronised; the mock provider accepted any string as an id, which is why the
+     * whole test suite stayed green over a path that could not work in production.
+     *
+     * <p>A route whose cities cannot both be translated is skipped, loudly. Falling back to a name
+     * is what caused this, and guessing an id is worse: a plausible-but-wrong city id imports a
+     * real, bookable seat on a bus going somewhere else.
+     */
     private int synchronizeRoute(ProviderType providerType, Route route) {
         Optional<City> origin = cityRepository.findById(route.originCityId());
         Optional<City> destination = cityRepository.findById(route.destinationCityId());
@@ -111,11 +130,30 @@ public class SynchronizeProviderCatalogService implements SynchronizeProviderCat
             return 0;
         }
 
+        Optional<UUID> originLocation = origin.get().locationId();
+        Optional<UUID> destinationLocation = destination.get().locationId();
+        if (originLocation.isEmpty() || destinationLocation.isEmpty()) {
+            log.warn("Route {} has a city with no canonical location recorded ({} -> {}) — cannot be "
+                            + "translated for provider {}, skipping", route.id(), origin.get().name(),
+                    destination.get().name(), providerType);
+            return 0;
+        }
+
+        Map<UUID, String> cityIds = providerLocationResolutionClient.resolveCityIds(providerType,
+                List.of(originLocation.get(), destinationLocation.get()));
+        String originCityId = cityIds.get(originLocation.get());
+        String destinationCityId = cityIds.get(destinationLocation.get());
+        if (originCityId == null || destinationCityId == null) {
+            log.warn("Provider {} cannot name both ends of route {} ({} -> {}) — skipping", providerType,
+                    route.id(), origin.get().name(), destination.get().name());
+            return 0;
+        }
+
         int reconciled = 0;
         for (int offset = 0; offset < syncWindowDays; offset++) {
             LocalDate date = LocalDate.now(clock).plusDays(offset);
             List<ProviderIntegrationClient.ExternalProviderTrip> results =
-                    providerIntegrationClient.searchTrips(providerType, origin.get().name(), destination.get().name(), date);
+                    providerIntegrationClient.searchTrips(providerType, originCityId, destinationCityId, date);
             for (ProviderIntegrationClient.ExternalProviderTrip result : results) {
                 if (reconcileTrip(providerType, route.id(), result)) {
                     reconciled++;

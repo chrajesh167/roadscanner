@@ -5,8 +5,10 @@ import com.roadscanner.searchservice.location.application.usecase.DisableLocatio
 import com.roadscanner.searchservice.location.application.usecase.GetLocationService;
 import com.roadscanner.searchservice.location.application.usecase.GetProviderMappingService;
 import com.roadscanner.searchservice.location.application.usecase.ManageProviderMappingsService;
+import com.roadscanner.searchservice.location.application.usecase.ResolveProviderLocationsService;
 import com.roadscanner.searchservice.location.application.usecase.SearchProviderMappingsService;
 import com.roadscanner.searchservice.location.domain.port.in.ManageProviderMappings;
+import com.roadscanner.searchservice.location.domain.port.in.ResolveProviderLocations;
 import com.roadscanner.searchservice.location.domain.port.in.SearchProviderMappings;
 import com.roadscanner.searchservice.location.application.usecase.SearchLocationsService;
 import com.roadscanner.searchservice.domain.port.out.ProviderTripSearchClient;
@@ -77,6 +79,11 @@ public class LocationUseCaseConfig {
     @Bean
     public DisableLocation disableLocation(LocationRepository repository, Clock locationClock) {
         return new DisableLocationService(repository, locationClock);
+    }
+
+    @Bean
+    public ResolveProviderLocations resolveProviderLocations(ProviderLocationMappingRepository mappingRepository) {
+        return new ResolveProviderLocationsService(mappingRepository);
     }
 
     @Bean
