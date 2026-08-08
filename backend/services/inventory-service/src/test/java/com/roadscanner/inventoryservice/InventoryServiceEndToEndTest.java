@@ -86,19 +86,24 @@ class InventoryServiceEndToEndTest {
         String destination = "Pune-" + UUID.randomUUID();
         UUID tripId = publishTrip(origin, destination);
 
+        // Both halves are awaited together. Ingestion writes the trip and its seat layout in two
+        // separate transactions, so the trip is queryable strictly before the layout is committed —
+        // waiting only on the trip and then reading the layout races that gap and intermittently
+        // sees 404. The condition below is the whole post-ingestion state, so it cannot pass until
+        // both writes are visible.
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
             ResponseEntity<Map> response = rest.getForEntity("/api/v1/inventory/trips/{tripId}", Map.class, tripId);
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getBody().get("origin")).isEqualTo(origin);
             assertThat(response.getBody().get("destination")).isEqualTo(destination);
             assertThat(response.getBody().get("bookable")).isEqualTo(true);
-        });
 
-        ResponseEntity<Map> seatLayoutResponse = rest.getForEntity(
-                "/api/v1/inventory/trips/{tripId}/seat-layout", Map.class, tripId);
-        assertThat(seatLayoutResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        List<Map<String, Object>> seats = (List<Map<String, Object>>) seatLayoutResponse.getBody().get("seats");
-        assertThat(seats).hasSize(2);
+            ResponseEntity<Map> seatLayoutResponse = rest.getForEntity(
+                    "/api/v1/inventory/trips/{tripId}/seat-layout", Map.class, tripId);
+            assertThat(seatLayoutResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+            List<Map<String, Object>> seats = (List<Map<String, Object>>) seatLayoutResponse.getBody().get("seats");
+            assertThat(seats).hasSize(2);
+        });
     }
 
     @Test
