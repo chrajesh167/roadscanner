@@ -30,6 +30,8 @@ import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -142,6 +144,13 @@ class BookingServiceEndToEndTest {
      *
      * @return the block reference this stub will hand back, so a caller can assert on it
      */
+    private static final Map<String, Object> PASSENGER_BODY = Map.of(
+            "firstName", "Asha", "lastName", "Menon", "birthDate", "1994-03-17",
+            "gender", "female", "seatNumber", "L1");
+
+    private static final Map<String, Object> CONTACT_BODY = Map.of(
+            "phone", "+919876543210", "email", "asha@example.com", "communicationPreference", "email");
+
     private String stubProviderAuthenticateAndBlock() {
         String blockReference = "block-ref-" + UUID.randomUUID();
 
@@ -151,6 +160,12 @@ class BookingServiceEndToEndTest {
                         """.formatted(UUID.randomUUID()))));
         PROVIDER_INTEGRATION_SERVICE.stubFor(post(urlPathMatching(
                         "/internal/api/v1/providers/MOCK/sessions/[^/]+/trips/MOCK-TRIP-1/seat-blocks"))
+                // Asserted, not ignored: provider-integration-service requires the occupant of each
+                // seat, and a stub that accepted any body is exactly why the old mismatch shipped.
+                .withRequestBody(matchingJsonPath("$.passengers[0].firstName", equalTo("Asha")))
+                .withRequestBody(matchingJsonPath("$.passengers[0].lastName", equalTo("Menon")))
+                .withRequestBody(matchingJsonPath("$.passengers[0].birthDate", equalTo("1994-03-17")))
+                .withRequestBody(matchingJsonPath("$.passengers[0].seatNumber", equalTo("L1")))
                 .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json").withBody("""
                         {"reservationId":"%s","providerBlockReference":"%s","providerTripId":"MOCK-TRIP-1",
                          "seatNumbers":["L1"],"status":"BLOCKED","blockedAt":"2026-08-01T00:00:00Z",
@@ -168,15 +183,14 @@ class BookingServiceEndToEndTest {
         stubProviderAuthenticateAndBlock();
 
         ResponseEntity<Map> holdResponse = rest.exchange("/api/v1/bookings/holds", HttpMethod.POST,
-                new HttpEntity<>(Map.of("tripId", tripId.toString(), "seatNumbers", List.of("L1")),
+                new HttpEntity<>(Map.of("tripId", tripId.toString(), "passengers", List.of(PASSENGER_BODY)),
                         authHeaders(travelerId)),
                 Map.class);
         assertThat(holdResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String seatHoldId = (String) holdResponse.getBody().get("seatHoldId");
 
         ResponseEntity<Map> createResponse = rest.exchange("/api/v1/bookings", HttpMethod.POST,
-                new HttpEntity<>(Map.of("seatHoldId", seatHoldId, "passengers",
-                        List.of(Map.of("fullName", "Jane Doe", "age", 30, "gender", "F", "seatNumber", "L1"))),
+                new HttpEntity<>(Map.of("seatHoldId", seatHoldId, "contact", CONTACT_BODY),
                         authHeaders(travelerId)),
                 Map.class);
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -201,15 +215,14 @@ class BookingServiceEndToEndTest {
         stubProviderAuthenticateAndBlock();
 
         ResponseEntity<Map> holdResponse = rest.exchange("/api/v1/bookings/holds", HttpMethod.POST,
-                new HttpEntity<>(Map.of("tripId", tripId.toString(), "seatNumbers", List.of("L1")),
+                new HttpEntity<>(Map.of("tripId", tripId.toString(), "passengers", List.of(PASSENGER_BODY)),
                         authHeaders(travelerId)),
                 Map.class);
         assertThat(holdResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String seatHoldId = (String) holdResponse.getBody().get("seatHoldId");
 
         ResponseEntity<Map> createResponse = rest.exchange("/api/v1/bookings", HttpMethod.POST,
-                new HttpEntity<>(Map.of("seatHoldId", seatHoldId, "passengers",
-                        List.of(Map.of("fullName", "Jane Doe", "age", 30, "gender", "F", "seatNumber", "L1"))),
+                new HttpEntity<>(Map.of("seatHoldId", seatHoldId, "contact", CONTACT_BODY),
                         authHeaders(travelerId)),
                 Map.class);
         // Asserted before the request under test runs. Without it a failed setup leaves bookingId
@@ -241,7 +254,7 @@ class BookingServiceEndToEndTest {
         stubBookableTrip(tripId, "FIRST_PARTY", false);
 
         ResponseEntity<Map> response = rest.exchange("/api/v1/bookings/holds", HttpMethod.POST,
-                new HttpEntity<>(Map.of("tripId", tripId.toString(), "seatNumbers", List.of("L1")),
+                new HttpEntity<>(Map.of("tripId", tripId.toString(), "passengers", List.of(PASSENGER_BODY)),
                         authHeaders(UUID.randomUUID())),
                 Map.class);
 

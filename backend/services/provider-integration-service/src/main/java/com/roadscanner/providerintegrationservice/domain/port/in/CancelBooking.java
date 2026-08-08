@@ -11,19 +11,19 @@ public interface CancelBooking {
     Result cancel(Command command);
 
     /**
-     * The order token is required, not optional. Providers authorise cancellation with it, and a
-     * caller that has lost it cannot cancel — better to refuse here than to send an empty token and
-     * read the provider's rejection as "cancellation failed".
+     * The order token is deliberately absent: it is resolved here from the {@code ProviderBooking}
+     * recorded at confirmation, not supplied by the caller.
+     *
+     * <p>It used to be a required field on this command, which meant only a caller already holding
+     * a provider credential could cancel — and no caller ever held one, because the token was never
+     * returned or stored. Resolving it internally is what makes cancellation reachable at all, and
+     * it keeps a provider secret inside the one service whose job is provider vocabulary.
      */
-    record Command(ProviderSessionId sessionId, String providerOrderReference, String providerOrderToken,
-                   String reason) {
+    record Command(ProviderSessionId sessionId, String providerOrderReference, String reason) {
         public Command {
             Objects.requireNonNull(sessionId, "sessionId must not be null");
             if (providerOrderReference == null || providerOrderReference.isBlank()) {
                 throw new IllegalArgumentException("providerOrderReference must not be blank");
-            }
-            if (providerOrderToken == null || providerOrderToken.isBlank()) {
-                throw new IllegalArgumentException("providerOrderToken must not be blank");
             }
         }
     }

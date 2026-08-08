@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/misc';
 import { FadeIn, Pressable } from '@/components/ui/motion';
 import { PageShell } from '@/components/layout/page-shell';
 import { FlowSteps } from '@/components/booking/flow-steps';
+import { HoldTimer } from '@/components/booking/hold-timer';
 import { useBooking } from '@/lib/hooks/use-bookings';
 import {
   isTerminalPaymentStatus,
@@ -56,9 +57,15 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
 
   const idempotencyKey = useBookingFlowStore((state) => state.idempotencyKey);
   const storedBookingId = useBookingFlowStore((state) => state.bookingId);
+  const hold = useBookingFlowStore((state) => state.hold);
 
   const status = paymentStatus?.status;
   const settled = isTerminalPaymentStatus(status);
+
+  // The seats are held from the moment the booking is created until payment settles, so this is
+  // where the countdown belongs. It is only shown for the hold this session actually placed — a
+  // booking opened from a link elsewhere has no hold in the store to count down.
+  const showHoldTimer = Boolean(hold) && storedBookingId === bookingId && !settled;
 
   // A captured payment is the end of this screen's job — hand off to the confirmation page.
   React.useEffect(() => {
@@ -130,6 +137,19 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
       width="wide"
       title="Payment"
       description={`Booking ${booking.bookingId.split('-')[0]?.toUpperCase()}`}
+      actions={
+        showHoldTimer && hold ? (
+          <HoldTimer
+            expiresAt={hold.expiresAt}
+            onExpire={() =>
+              toast.warning('Your seat hold has expired', {
+                description:
+                  'If your payment does not go through, those seats will be released and you will need to choose again.',
+              })
+            }
+          />
+        ) : undefined
+      }
     >
       <FlowSteps current="Payment" />
 

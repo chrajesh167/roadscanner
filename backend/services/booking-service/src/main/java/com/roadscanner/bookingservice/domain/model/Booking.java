@@ -27,6 +27,7 @@ public final class Booking {
     private final Instant holdExpiresAt;
     private String providerBookingReference;
     private final List<Passenger> passengers;
+    private final Contact contact;
     private final Fare fare;
     private BookingStatus status;
     private CancellationReason cancellationReason;
@@ -40,7 +41,7 @@ public final class Booking {
 
     private Booking(BookingId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                      ProviderType providerType, String providerTripId, String providerBlockReference,
-                     Instant holdExpiresAt, String providerBookingReference, List<Passenger> passengers, Fare fare,
+                     Instant holdExpiresAt, String providerBookingReference, List<Passenger> passengers, Contact contact, Fare fare,
                      BookingStatus status, CancellationReason cancellationReason, boolean supportFlagged,
                      String paymentReference, Ticket ticket, Instant createdAt, Instant confirmedAt,
                      Instant cancelledAt, Instant completedAt) {
@@ -54,6 +55,7 @@ public final class Booking {
         this.holdExpiresAt = holdExpiresAt;
         this.providerBookingReference = providerBookingReference;
         this.passengers = List.copyOf(passengers);
+        this.contact = contact;
         this.fare = fare;
         this.status = status;
         this.cancellationReason = cancellationReason;
@@ -71,7 +73,8 @@ public final class Booking {
      * entry: "there is no separate 'just created, not yet awaiting payment' state"). */
     public static Booking create(BookingId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                                   ProviderType providerType, String providerTripId, String providerBlockReference,
-                                  Instant holdExpiresAt, List<Passenger> passengers, Fare fare, Instant now) {
+                                  Instant holdExpiresAt, List<Passenger> passengers, Contact contact,
+                                  Fare fare, Instant now) {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(travelerId, "travelerId must not be null");
         Objects.requireNonNull(tripId, "tripId must not be null");
@@ -86,21 +89,22 @@ public final class Booking {
             throw new IllegalArgumentException("passengers must not be empty");
         }
         return new Booking(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
-                providerBlockReference, holdExpiresAt, null, passengers, fare, BookingStatus.PENDING_PAYMENT, null,
+                providerBlockReference, holdExpiresAt, null, passengers, contact, fare, BookingStatus.PENDING_PAYMENT, null,
                 false, null, null, now, null, null, null);
     }
 
     public static Booking reconstitute(BookingId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                                         ProviderType providerType, String providerTripId,
                                         String providerBlockReference, Instant holdExpiresAt,
-                                        String providerBookingReference, List<Passenger> passengers, Fare fare,
+                                        String providerBookingReference, List<Passenger> passengers,
+                                        Contact contact, Fare fare,
                                         BookingStatus status, CancellationReason cancellationReason,
                                         boolean supportFlagged, String paymentReference, Ticket ticket,
                                         Instant createdAt, Instant confirmedAt, Instant cancelledAt,
                                         Instant completedAt) {
         return new Booking(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
                 providerBlockReference, holdExpiresAt,
-                providerBookingReference, passengers, fare, status, cancellationReason, supportFlagged,
+                providerBookingReference, passengers, contact, fare, status, cancellationReason, supportFlagged,
                 paymentReference, ticket, createdAt, confirmedAt, cancelledAt, completedAt);
     }
 
@@ -118,10 +122,15 @@ public final class Booking {
      * {@code PENDING_PAYMENT} — covers both a duplicate {@code PaymentCompleted} delivery for an
      * already-{@code CONFIRMED} booking, and the "late success after a timeout-driven
      * cancellation" edge case, where the caller must branch on the {@code false} result and
-     * trigger a refund instead (docs/architecture/payment-flow.md). */
+     * trigger a refund instead (docs/architecture/payment-flow.md).
+     *
+     * <p>{@code ticket} may be null. What confirms a booking is the provider's order, not a
+     * document: FlixBus, for one, documents no ticket-download endpoint at all, and requiring a
+     * ticket here meant a successfully paid provider order was cancelled and refunded seconds
+     * later because no ticket could be fetched for it. The field was already nullable in the
+     * database and already exposed as an {@code Optional} — only this check disagreed. */
     public boolean confirm(String providerBookingReference, Ticket ticket, Instant now) {
         Objects.requireNonNull(providerBookingReference, "providerBookingReference must not be null");
-        Objects.requireNonNull(ticket, "ticket must not be null");
         Objects.requireNonNull(now, "now must not be null");
         if (status != BookingStatus.PENDING_PAYMENT) {
             return false;
@@ -213,6 +222,11 @@ public final class Booking {
 
     public Optional<String> providerBookingReference() {
         return Optional.ofNullable(providerBookingReference);
+    }
+
+    /** Where the ticket is sent. Required by the provider at checkout, so never absent. */
+    public Contact contact() {
+        return contact;
     }
 
     public List<Passenger> passengers() {

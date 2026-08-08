@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -56,7 +57,7 @@ class HoldControllerTest {
         mockMvc.perform(post("/api/v1/bookings/holds")
                         .with(traveler(UUID.randomUUID()))
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(new HoldSeatsRequest(tripId, List.of("L1")))))
+                        .content(objectMapper.writeValueAsString(new HoldSeatsRequest(tripId, List.of(new HoldSeatsRequest.HoldPassengerRequest("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1"))))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.seatHoldId").value(seatHoldId.toString()))
                 .andExpect(jsonPath("$.seatNumbers[0]").value("L1"));
@@ -67,12 +68,12 @@ class HoldControllerTest {
         mockMvc.perform(post("/api/v1/bookings/holds")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(
-                                new HoldSeatsRequest(UUID.randomUUID(), List.of("L1")))))
+                                new HoldSeatsRequest(UUID.randomUUID(), List.of(new HoldSeatsRequest.HoldPassengerRequest("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1"))))))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void holdRejectsEmptySeatNumbers() throws Exception {
+    void holdRejectsAnEmptyPassengerList() throws Exception {
         mockMvc.perform(post("/api/v1/bookings/holds")
                         .with(traveler(UUID.randomUUID()))
                         .contentType("application/json")
@@ -86,7 +87,7 @@ class HoldControllerTest {
                         .with(jwt().jwt(b -> b.subject(UUID.randomUUID().toString()).claim("role", "OPERATOR")))
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(
-                                new HoldSeatsRequest(UUID.randomUUID(), List.of("L1")))))
+                                new HoldSeatsRequest(UUID.randomUUID(), List.of(new HoldSeatsRequest.HoldPassengerRequest("Asha", "Menon", LocalDate.of(1994, 3, 17), "female", "L1"))))))
                 .andExpect(status().isForbidden());
     }
 

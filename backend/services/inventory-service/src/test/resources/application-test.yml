@@ -7,3 +7,5 @@ roadscanner:
     allowed-origins: http://localhost:5173
   provider-integration-service:
     base-url: http://localhost:0 # deliberately unreachable — exercises the "degrade, not fail" path
+  search-service:
+    base-url: http://localhost:0 # deliberately unreachable — exercises the "degrade, not fail" path

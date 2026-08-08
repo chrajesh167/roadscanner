@@ -25,14 +25,14 @@ public final class SeatHold {
     private final ProviderType providerType;
     private final String providerTripId;
     private final String providerBlockReference;
-    private final List<String> seatNumbers;
+    private final List<Passenger> passengers;
     private final Fare fare;
     private final Instant expiresAt;
     private final Instant createdAt;
 
     private SeatHold(SeatHoldId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                       ProviderType providerType, String providerTripId, String providerBlockReference,
-                      List<String> seatNumbers, Fare fare, Instant expiresAt, Instant createdAt) {
+                      List<Passenger> passengers, Fare fare, Instant expiresAt, Instant createdAt) {
         this.id = id;
         this.travelerId = travelerId;
         this.tripId = tripId;
@@ -40,7 +40,7 @@ public final class SeatHold {
         this.providerType = providerType;
         this.providerTripId = providerTripId;
         this.providerBlockReference = providerBlockReference;
-        this.seatNumbers = List.copyOf(seatNumbers);
+        this.passengers = List.copyOf(passengers);
         this.fare = fare;
         this.expiresAt = expiresAt;
         this.createdAt = createdAt;
@@ -48,7 +48,7 @@ public final class SeatHold {
 
     public static SeatHold create(SeatHoldId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                                    ProviderType providerType, String providerTripId, String providerBlockReference,
-                                   List<String> seatNumbers, Fare fare, Instant expiresAt, Instant now) {
+                                   List<Passenger> passengers, Fare fare, Instant expiresAt, Instant now) {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(travelerId, "travelerId must not be null");
         Objects.requireNonNull(tripId, "tripId must not be null");
@@ -59,19 +59,19 @@ public final class SeatHold {
         Objects.requireNonNull(fare, "fare must not be null");
         Objects.requireNonNull(expiresAt, "expiresAt must not be null");
         Objects.requireNonNull(now, "now must not be null");
-        if (seatNumbers == null || seatNumbers.isEmpty()) {
-            throw new IllegalArgumentException("seatNumbers must not be empty");
+        if (passengers == null || passengers.isEmpty()) {
+            throw new IllegalArgumentException("passengers must not be empty");
         }
         return new SeatHold(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
-                providerBlockReference, seatNumbers, fare, expiresAt, now);
+                providerBlockReference, passengers, fare, expiresAt, now);
     }
 
     public static SeatHold reconstitute(SeatHoldId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                                          ProviderType providerType, String providerTripId,
-                                         String providerBlockReference, List<String> seatNumbers, Fare fare,
+                                         String providerBlockReference, List<Passenger> passengers, Fare fare,
                                          Instant expiresAt, Instant createdAt) {
         return new SeatHold(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
-                providerBlockReference, seatNumbers, fare, expiresAt, createdAt);
+                providerBlockReference, passengers, fare, expiresAt, createdAt);
     }
 
     public boolean isExpired(Instant now) {
@@ -114,8 +114,19 @@ public final class SeatHold {
         return providerBlockReference;
     }
 
+    /**
+     * The travellers these seats are held for, each carrying its own seat.
+     *
+     * <p>Captured at hold time because the provider binds occupant to seat there — see
+     * {@code HoldSeats}. Carried forward onto the {@code Booking} unchanged, so the people who
+     * were reserved a seat are the people who are ticketed for it.
+     */
+    public List<Passenger> passengers() {
+        return passengers;
+    }
+
     public List<String> seatNumbers() {
-        return seatNumbers;
+        return passengers.stream().map(Passenger::seatNumber).toList();
     }
 
     public Instant expiresAt() {

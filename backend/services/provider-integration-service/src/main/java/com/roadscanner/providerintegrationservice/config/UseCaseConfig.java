@@ -34,6 +34,7 @@ import com.roadscanner.providerintegrationservice.domain.port.out.ProviderCache;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderClient;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderConfigurationRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderHealthRepository;
+import com.roadscanner.providerintegrationservice.domain.port.out.ProviderBookingRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.ProviderReservationRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.SessionRepository;
 import com.roadscanner.providerintegrationservice.domain.port.out.TokenCache;
@@ -143,13 +144,15 @@ public class UseCaseConfig {
 
     @Bean
     public ConfirmBooking confirmBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry,
-                                         ProviderReservationRepository reservationRepository) {
-        return new ConfirmBookingService(sessionResolver, registry, reservationRepository);
+                                         ProviderReservationRepository reservationRepository,
+                                         ProviderBookingRepository bookingRepository) {
+        return new ConfirmBookingService(sessionResolver, registry, reservationRepository, bookingRepository);
     }
 
     @Bean
-    public CancelBooking cancelBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry) {
-        return new CancelBookingService(sessionResolver, registry);
+    public CancelBooking cancelBooking(ActiveSessionResolver sessionResolver, ProviderClientRegistry registry,
+                                       ProviderBookingRepository bookingRepository, Clock clock) {
+        return new CancelBookingService(sessionResolver, registry, bookingRepository, clock);
     }
 
     @Bean

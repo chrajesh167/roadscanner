@@ -4,6 +4,7 @@ import com.roadscanner.bookingservice.domain.model.Booking;
 import com.roadscanner.bookingservice.domain.model.BookingId;
 import com.roadscanner.bookingservice.domain.model.BookingStatus;
 import com.roadscanner.bookingservice.domain.model.CancellationReason;
+import com.roadscanner.bookingservice.domain.model.Contact;
 import com.roadscanner.bookingservice.domain.model.Fare;
 import com.roadscanner.bookingservice.domain.model.Passenger;
 import com.roadscanner.bookingservice.domain.model.ProviderType;
@@ -19,7 +20,8 @@ final class BookingMapper {
 
     Booking toDomain(BookingJpaEntity entity) {
         List<Passenger> passengers = entity.getPassengers().stream()
-                .map(p -> new Passenger(p.getFullName(), p.getAge(), p.getGender(), p.getSeatNumber()))
+                .map(p -> new Passenger(p.getFirstName(), p.getLastName(), p.getBirthDate(), p.getGender(),
+                        p.getSeatNumber()))
                 .toList();
         Ticket ticket = entity.getTicketProviderTicketId() == null ? null
                 : new Ticket(entity.getTicketProviderTicketId(), entity.getTicketFormat(), entity.getTicketContent(),
@@ -35,6 +37,8 @@ final class BookingMapper {
                 entity.getHoldExpiresAt(),
                 entity.getProviderBookingReference(),
                 passengers,
+                new Contact(entity.getContactPhone(), entity.getContactEmail(),
+                        Contact.CommunicationPreference.parse(entity.getContactCommunicationPreference())),
                 new Fare(entity.getFareAmount(), Currency.getInstance(entity.getFareCurrency())),
                 BookingStatus.valueOf(entity.getStatus()),
                 entity.getCancellationReason() == null ? null : CancellationReason.valueOf(entity.getCancellationReason()),
@@ -60,6 +64,9 @@ final class BookingMapper {
                 booking.holdExpiresAt(),
                 booking.providerBookingReference().orElse(null),
                 toEmbeddables(booking.passengers()),
+                booking.contact().phone(),
+                booking.contact().email(),
+                booking.contact().communicationPreference().wireValue(),
                 booking.fare().amount(),
                 booking.fare().currency().getCurrencyCode(),
                 booking.status().name(),
@@ -96,7 +103,8 @@ final class BookingMapper {
 
     private List<PassengerEmbeddable> toEmbeddables(List<Passenger> passengers) {
         return passengers.stream()
-                .map(p -> new PassengerEmbeddable(p.fullName(), p.age(), p.gender(), p.seatNumber()))
+                .map(p -> new PassengerEmbeddable(p.firstName(), p.lastName(), p.birthDate(), p.gender(),
+                        p.seatNumber()))
                 .toList();
     }
 }

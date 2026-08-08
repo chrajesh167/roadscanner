@@ -6,6 +6,7 @@ import com.roadscanner.inventoryservice.domain.model.CityId;
 final class CityMapper {
 
     City toDomain(CityJpaEntity entity) {
-        return City.reconstitute(new CityId(entity.getId()), entity.getName(), entity.getState(), entity.getCountry());
+        return City.reconstitute(new CityId(entity.getId()), entity.getName(), entity.getState(), entity.getCountry(),
+                entity.getLocationId());
     }
 }

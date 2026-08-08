@@ -44,11 +44,11 @@ public class HoldSeatsService implements HoldSeats {
                         "no ProviderMapping — this trip cannot currently be booked"));
 
         ProviderIntegrationClient.Reservation reservation = providerIntegrationClient.blockSeats(
-                mapping.providerType(), mapping.providerTripId(), command.seatNumbers());
+                mapping.providerType(), mapping.providerTripId(), command.passengers());
 
         SeatHold hold = SeatHold.create(SeatHoldId.generate(), command.travelerId(), command.tripId(),
                 trip.departureTime(), mapping.providerType(), mapping.providerTripId(),
-                reservation.providerBlockReference(), reservation.seatNumbers(),
+                reservation.providerBlockReference(), command.passengers(),
                 new Fare(trip.fareAmount(), Currency.getInstance(trip.fareCurrency())), reservation.expiresAt(),
                 clock.instant());
         seatHoldRepository.save(hold);

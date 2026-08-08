@@ -6,8 +6,12 @@
   defines (`PENDING_PAYMENT → CONFIRMED → COMPLETED`, with `CANCELLED` reachable from either
   non-terminal state). `booking-service` owns this state machine exclusively — no other service
   mutates a booking's state, ever, under any circumstance.
-- **Passenger details** — full name, age, gender, seat number per passenger, attached to a
-  booking at creation time (FR-3.1).
+- **Passenger details** — given name, family name, birth date, gender and seat number per
+  passenger, attached to the seat hold when the seats are blocked and carried into the booking it
+  becomes (FR-3.1). The provider binds an occupant to a seat at block time, so the identities
+  cannot wait until booking creation.
+- **Delivery contact** — the phone, email and communication preference the provider sends the
+  ticket to; one per booking, supplied at booking creation.
 - **Booking history** — every booking a traveler has ever made, queryable by that traveler,
   regardless of current status (FR-1.3). Nothing is ever deleted — see `data-ownership.md`.
 - **Booking cancellation** — traveler-initiated (FR-3.5) and cascade-initiated (on `TripCancelled`,
@@ -16,7 +20,8 @@
   `CancellationReason`).
 - **Booking validation** — a booking may only be created against a still-valid seat hold, for a
   trip `inventory-service` confirms is real and bookable, with passenger details that satisfy
-  basic structural rules (non-empty name, plausible age, one passenger per held seat).
+  basic structural rules (non-empty name parts, a birth date in the past, one passenger per held
+  seat) and a deliverable contact.
 - **Booking ownership enforcement** — a booking is only ever visible to the traveler who created
   it, an operator viewing bookings against their own trip, or an admin/support agent — see
   `boundaries.md`'s "Booking ↔ Auth" section.

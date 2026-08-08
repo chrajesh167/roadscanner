@@ -58,21 +58,23 @@ docker compose up -d postgres-booking kafka
 
 The app starts on `:8085` with the `local` profile, expecting `inventory-service` (`:8084`) and
 `provider-integration-service` (`:8083`) to already be running natively. It also expects a valid
-JWT bearer token on every `/api/v1/bookings/**` request — see "JWT Verification in Local
-Development" below for why this doesn't yet interoperate with a locally-running `auth-service`
-out of the box.
+JWT bearer token on every `/api/v1/bookings/**` request — one issued by a locally-running
+`auth-service` works as-is; see "JWT Verification in Local Development" below.
 
 ### JWT Verification in Local Development
 
-`roadscanner.security.jwt.ephemeral-keys: true` in `application-local.yml` generates a throwaway
-RS256 key pair at startup, exactly matching `auth-service`'s own local-dev convenience. **This
-does not let this service verify a real token from a separately-running `auth-service`
-instance** — `auth-service`'s own `application-local.yml` also uses `ephemeral-keys: true`,
-generating an unrelated key pair every restart, so the two services' keys never match today. To
-test the full chain locally, configure both services with the same fixed PEM key pair via
-`roadscanner.security.jwt.public-key-pem` (this service) and
-`roadscanner.security.jwt.private-key-pem`/`public-key-pem` (`auth-service`) — see "Remaining
-Integration Points".
+`application-local.yml` carries `auth-service`'s **shared development public key** under
+`roadscanner.security.jwt.public-key-pem` — the same fixed, non-secret RS256 key every locally-run
+service verifies against, and whose private half only `auth-service` holds. A token minted by a
+locally-running `auth-service` is therefore accepted here without any out-of-band setup.
+
+This replaced `ephemeral-keys: true`, which generated an unrelated throwaway pair in each process:
+login succeeded at `auth-service` and every call here returned 401, because no two services shared
+key material. The flag is now absent rather than set to `false` — `JwtConfig` checks it *before*
+the configured key, so leaving it on would silently win.
+
+Deployed profiles are unchanged: the public key comes from the secrets manager, and a missing key
+still fails startup.
 
 ### Running Fully Containerized
 

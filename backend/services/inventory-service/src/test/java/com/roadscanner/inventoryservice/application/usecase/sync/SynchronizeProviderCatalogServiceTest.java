@@ -18,6 +18,7 @@ import com.roadscanner.inventoryservice.testsupport.fakes.InMemorySyncRecordRepo
 import com.roadscanner.inventoryservice.testsupport.fakes.InMemoryTripRepository;
 import com.roadscanner.inventoryservice.testsupport.fakes.RecordingCatalogEventPublisher;
 import com.roadscanner.inventoryservice.testsupport.fakes.StubProviderIntegrationClient;
+import com.roadscanner.inventoryservice.testsupport.fakes.StubProviderLocationResolutionClient;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -37,21 +38,76 @@ class SynchronizeProviderCatalogServiceTest {
     private final InMemoryProviderMappingRepository providerMappingRepository = new InMemoryProviderMappingRepository();
     private final InMemorySyncRecordRepository syncRecordRepository = new InMemorySyncRecordRepository();
     private final StubProviderIntegrationClient providerIntegrationClient = new StubProviderIntegrationClient();
+    private final StubProviderLocationResolutionClient locationResolutionClient =
+            new StubProviderLocationResolutionClient();
     private final RecordingCatalogEventPublisher catalogEventPublisher = new RecordingCatalogEventPublisher();
     private final MutableClock clock = new MutableClock(NOW);
 
     private final CityId originCityId = CityId.generate();
     private final CityId destinationCityId = CityId.generate();
+    private final java.util.UUID originLocationId = java.util.UUID.randomUUID();
+    private final java.util.UUID destinationLocationId = java.util.UUID.randomUUID();
     private final RouteId routeId = RouteId.generate();
 
     private SynchronizeProviderCatalogService service(int windowDays) {
-        cityRepository.add(City.create(originCityId, "Chennai", "Tamil Nadu", "India"));
-        cityRepository.add(City.create(destinationCityId, "Bengaluru", "Karnataka", "India"));
+        cityRepository.add(City.reconstitute(originCityId, "Chennai", "Tamil Nadu", "India", originLocationId));
+        cityRepository.add(City.reconstitute(destinationCityId, "Bengaluru", "Karnataka", "India",
+                destinationLocationId));
         routeRepository.add(Route.create(routeId, originCityId, destinationCityId, 350.0));
 
         return new SynchronizeProviderCatalogService(routeRepository, cityRepository, tripRepository,
                 seatLayoutRepository, providerMappingRepository, syncRecordRepository, providerIntegrationClient,
-                catalogEventPublisher, clock, windowDays);
+                locationResolutionClient, catalogEventPublisher, clock, windowDays);
+    }
+
+    @Test
+    void searchesTheProviderByItsOwnCityIdsRatherThanCityNames() {
+        providerIntegrationClient.searchTripsResult = (p, d) -> List.of();
+
+        service(1).synchronize(new SynchronizeProviderCatalog.Command(new ProviderType("MOCK")));
+
+        // The defect this replaces sent "Chennai" and "Bengaluru" where every provider's search
+        // takes an id it issued. FlixBus rejects those outright; the mock accepted any string,
+        // which is exactly why a green suite proved nothing about the real path.
+        assertThat(locationResolutionClient.requestedLocationIds)
+                .containsExactly(originLocationId, destinationLocationId);
+        assertThat(providerIntegrationClient.searchedOrigins)
+                .containsExactly("provider-city-" + originLocationId);
+        assertThat(providerIntegrationClient.searchedDestinations)
+                .containsExactly("provider-city-" + destinationLocationId);
+        assertThat(providerIntegrationClient.searchedOrigins).doesNotContain("Chennai");
+        assertThat(providerIntegrationClient.searchedDestinations).doesNotContain("Bengaluru");
+    }
+
+    @Test
+    void skipsARouteTheProviderCannotNameRatherThanFallingBackToTheCityName() {
+        locationResolutionClient.unresolvable = List.of(destinationLocationId);
+
+        SynchronizeProviderCatalog.Result result = service(1).synchronize(
+                new SynchronizeProviderCatalog.Command(new ProviderType("MOCK")));
+
+        // Fail closed. A guessed city id imports a real, bookable seat on a bus going somewhere
+        // else, and nothing downstream would catch it before boarding.
+        assertThat(providerIntegrationClient.searchedOrigins).isEmpty();
+        assertThat(result.tripsReconciled()).isZero();
+        assertThat(result.succeeded()).isTrue();
+    }
+
+    @Test
+    void skipsACityWithNoCanonicalLocationRecorded() {
+        SynchronizeProviderCatalogService service = service(1);
+        // Overwrite the seeded city with one nobody has yet linked to a canonical location. This is
+        // the state every city is in until an administrator records the link.
+        cityRepository.add(City.create(originCityId, "Chennai", "Tamil Nadu", "India"));
+
+        SynchronizeProviderCatalog.Result result = service.synchronize(
+                new SynchronizeProviderCatalog.Command(new ProviderType("MOCK")));
+
+        // Nothing is asked of search-service either: an untranslatable city is known to be so
+        // before any call is made.
+        assertThat(locationResolutionClient.requestedLocationIds).isEmpty();
+        assertThat(providerIntegrationClient.searchedOrigins).isEmpty();
+        assertThat(result.succeeded()).isTrue();
     }
 
     @Test
@@ -122,7 +178,7 @@ class SynchronizeProviderCatalogServiceTest {
         };
         SynchronizeProviderCatalogService failing = new SynchronizeProviderCatalogService(throwingRouteRepository,
                 cityRepository, tripRepository, seatLayoutRepository, providerMappingRepository, syncRecordRepository,
-                providerIntegrationClient, catalogEventPublisher, clock, 1);
+                providerIntegrationClient, locationResolutionClient, catalogEventPublisher, clock, 1);
 
         SynchronizeProviderCatalog.Result result = failing.synchronize(new SynchronizeProviderCatalog.Command(new ProviderType("MOCK")));
 

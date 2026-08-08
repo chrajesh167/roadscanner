@@ -32,6 +32,7 @@ import com.roadscanner.inventoryservice.domain.port.out.CatalogEventPublisher;
 import com.roadscanner.inventoryservice.domain.port.out.CityRepository;
 import com.roadscanner.inventoryservice.domain.port.out.OperatorRefRepository;
 import com.roadscanner.inventoryservice.domain.port.out.ProviderIntegrationClient;
+import com.roadscanner.inventoryservice.domain.port.out.ProviderLocationResolutionClient;
 import com.roadscanner.inventoryservice.domain.port.out.ProviderMappingRepository;
 import com.roadscanner.inventoryservice.domain.port.out.RouteRepository;
 import com.roadscanner.inventoryservice.domain.port.out.SeatLayoutRepository;
@@ -125,10 +126,11 @@ public class UseCaseConfig {
                                                                     ProviderMappingRepository providerMappingRepository,
                                                                     SyncRecordRepository syncRecordRepository,
                                                                     ProviderIntegrationClient providerIntegrationClient,
+                                                                       ProviderLocationResolutionClient providerLocationResolutionClient,
                                                                     CatalogEventPublisher catalogEventPublisher, Clock clock,
                                                                     InventoryProperties properties) {
         return new SynchronizeProviderCatalogService(routeRepository, cityRepository, tripRepository, seatLayoutRepository,
-                providerMappingRepository, syncRecordRepository, providerIntegrationClient, catalogEventPublisher, clock,
+                providerMappingRepository, syncRecordRepository, providerIntegrationClient, providerLocationResolutionClient, catalogEventPublisher, clock,
                 properties.sync().windowDays());
     }
 

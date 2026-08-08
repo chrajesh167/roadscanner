@@ -36,17 +36,22 @@ sequenceDiagram
     participant IS as inventory-service
     participant PIS as provider-integration-service
 
-    T->>BS: select seat(s), proceed
+    T->>BS: submit passengers, each with their seat
     BS->>IS: re-validate trip is still bookable
     alt trip has no ProviderMapping
         BS-->>T: cannot be booked (see overview.md ambiguity #2)
     else trip is bookable
-        BS->>PIS: block seat(s) for the resolved ProviderMapping
+        BS->>PIS: block seat(s) with their occupants, for the resolved ProviderMapping
         PIS-->>BS: reservation reference + expiresAt
-        BS->>BS: persist SeatHold (traveler, trip, provider identity, reference, expiresAt)
-        BS-->>T: hold confirmed (reference, expiresAt)
+        BS->>BS: persist SeatHold (traveler, trip, provider identity, reference, passengers, expiresAt)
+        BS-->>T: hold confirmed (reference, seat numbers, expiresAt)
     end
 ```
+
+The traveler details arrive here, not at booking creation: `BlockSeat` binds an occupant to a seat
+when the block is placed — it needs the gender to honour gender-restricted seats — so a bare list
+of seat numbers cannot express the request. Seats are therefore chosen but *not* reserved while the
+client collects passenger details.
 
 Matches `docs/services/inventory-service/sequence-diagrams.md` flow 5, with the addition of the
 re-validation step and the local `SeatHold` persistence — flow 5 stops at "hold confirmed" because
@@ -60,14 +65,14 @@ sequenceDiagram
     participant BS as booking-service
     participant K as Kafka
 
-    T->>BS: submit passenger details + hold reference
+    T->>BS: submit delivery contact + hold reference
     BS->>BS: look up SeatHold by reference + traveler
     alt hold not found or already consumed
         BS-->>T: invalid or already-used hold
     else expiresAt has passed
         BS-->>T: hold expired — re-select seats (FR-3.4)
     else hold still valid
-        BS->>BS: create Booking (PENDING_PAYMENT), consume SeatHold
+        BS->>BS: create Booking (PENDING_PAYMENT) with the hold's passengers, consume SeatHold
         BS->>K: publish BookingCreated
         BS-->>T: booking created, proceed to payment
     end

@@ -61,7 +61,8 @@ fresh environment will have an empty search index until this item is resolved.
 
 ## 2. JWT key strategy across services
 
-**Status:** blocking for any multi-service environment.
+**Status: resolved for local development (Option A), 2026-08-05.** Deployed environments were
+never affected and are unchanged.
 
 `auth-service`, `booking-service` and `payment-service` all set `ephemeral-keys: true` in their
 `application-local.yml`. Each generates its **own** throwaway RSA keypair at startup, so a token
@@ -72,12 +73,13 @@ and every authenticated call returns 401.
 configuration mechanism for the real thing exists and works — `roadscanner.security.jwt.public-key-pem`
 on verifiers, `private-key-pem` on the issuer — it is simply not wired for local runs.
 
-### Interim state
+### Interim state (superseded)
 
 End-to-end validation passed one shared keypair to all three services via environment variables
 from a launcher script held outside the repository. **No key material and no launcher were
-committed.** The checked-in `application-local.yml` files are unchanged and still request ephemeral
-keys, so a fresh clone reproduces the 401s.
+committed.** The checked-in `application-local.yml` files were unchanged and still requested
+ephemeral keys, so a fresh clone reproduced the 401s. That is no longer the case — see the decision
+below.
 
 ### Options
 
@@ -87,14 +89,27 @@ keys, so a fresh clone reproduces the 401s.
 | **B. Generated on first run** | A `make dev-keys` / script writing to a gitignored path each service reads. No key in the repo; adds a setup step |
 | **C. Local secrets provider** | Mirrors dev/prod exactly (both already read from a secrets manager). Heaviest local setup |
 
-### Recommendation
+### Decision — Option A, for the `local` profile only
 
-**Decide the permanent configuration before production.** Options A and B are both defensible for
-local development; the important part is that the deployed profiles already read from a secrets
-manager and must never inherit an ephemeral or committed key.
+A single fixed RS256 pair now lives in `auth-service`'s `application-local.yml`; the public half is
+repeated verbatim in the `application-local.yml` of every verifier (`search-service`,
+`provider-integration-service`, `booking-service`, `payment-service`). `ephemeral-keys` is
+**removed** from all five, not set to `false` — each verifier's `JwtConfig` tests that flag before
+the configured key, so leaving it in place would silently override the shared key and change
+nothing.
 
-Whichever is chosen, `ephemeral-keys: true` should be removed from any service that verifies tokens
-it did not issue — as written it is not merely insecure, it is non-functional across services.
+Chosen over B because the `local` profile's contract in this repository is zero-setup: it already
+hardcodes local Postgres passwords and `localhost` hosts, and a key that must be generated before a
+service will start turns "clone and run" into "clone, read a README, run a script, run". The
+precedent concern in the table is real but narrow — the pair is generated for this purpose, signs
+nothing outside a developer's machine, and is duplicated in files that also point every datasource
+at `localhost`, so a deployed environment cannot inherit it by accident. Reversing to B later is a
+configuration change in five files and no code.
+
+Unchanged and load-bearing: deployed profiles read `public-key-pem` from the secrets manager,
+`auth-service` reads `private-key-pem` from it, and a service configured with neither still refuses
+to start. The `test` profiles keep `ephemeral-keys: true` — each mints its own tokens through
+`testsupport.security.TestJwtIssuer`, so they need no shared key and must not depend on one.
 
 ---
 
