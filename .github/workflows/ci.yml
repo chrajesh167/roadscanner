@@ -1,0 +1,126 @@
+name: CI
+
+# Pull requests and pushes to main. There is deliberately no schedule and no manual dispatch:
+# this workflow gates changes, and a run that no change triggered gates nothing.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same ref supersedes the run already in flight — the older one is only
+# reporting on a commit nobody will merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only. This workflow tests and builds; it publishes nothing and deploys nothing, so it has
+# no reason to hold a write token.
+permissions:
+  contents: read
+
+jobs:
+  # There is no root pom.xml and no Maven reactor — each service is an independent project with
+  # its own wrapper. The matrix reflects that structure rather than working around it: a service
+  # fails on its own, and a change to one does not gate the other six.
+  backend:
+    name: backend (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One red service must not hide the state of the other six — the whole point of running a
+      # pre-CI verification pass was to learn about every suite at once, not the first to break.
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - search-service
+          - provider-integration-service
+          - inventory-service
+          - booking-service
+          - payment-service
+          - notification-service
+    defaults:
+      run:
+        working-directory: backend/services/${{ matrix.service }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # The poms compile with --release 21. Pinning the runtime to 21 as well keeps CI on the
+          # version the code actually declares, rather than whatever the runner defaults to.
+          java-version: '21'
+          cache: maven
+
+      # `verify` runs the full suite and packages the jar, so this single command is both
+      # "test the backend" and "build the backend". No profile, no -D flags, nothing skipped.
+      #
+      # Testcontainers starts Postgres, Redis and Kafka itself from public images and wires them
+      # in via @ServiceConnection. docker-compose.yml is for local development only and must not
+      # be used here — it binds fixed host ports that would collide with Testcontainers' random
+      # ones. The ubuntu-latest runner already has a working Docker daemon, so no setup is needed.
+      #
+      # No credentials are required or supplied. Test profiles read no environment variables:
+      # FlixBus is mocked, Google Places defaults to disabled, SMTP is mocked with an empty host,
+      # and JWT/credential-encryption keys are generated per test JVM.
+      - name: Test and package
+        run: ./mvnw -B -ntp verify
+
+      # Only on failure, and only the reports — enough to identify the failing test and read its
+      # stack trace without re-running the job locally to find out what broke.
+      - name: Upload surefire reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-${{ matrix.service }}
+          path: backend/services/${{ matrix.service }}/target/surefire-reports/
+          retention-days: 7
+
+  # Two independent apps, each with its own package-lock.json. As with the backend, the matrix
+  # matches the repository rather than imposing a workspace root on it.
+  frontend:
+    name: frontend (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - customer-web
+          - admin-console
+    defaults:
+      run:
+        working-directory: frontend/apps/${{ matrix.app }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          # Per-app lockfile — the cache key must follow the app, not a root that does not exist.
+          cache-dependency-path: frontend/apps/${{ matrix.app }}/package-lock.json
+
+      # `ci`, not `install`: it installs exactly the lockfile and fails if package.json has
+      # drifted from it, which is the behaviour a pipeline wants.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      # Needs no environment: every NEXT_PUBLIC_* read in both apps has a localhost fallback, so
+      # the build is self-contained and no secrets are involved.
+      - name: Build
+        run: npm run build
