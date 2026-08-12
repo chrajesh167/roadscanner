@@ -122,6 +122,23 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: roadscanner-notification-postgres
+    environment:
+      POSTGRES_DB: notificationservice
+      POSTGRES_USER: notificationservice
+      POSTGRES_PASSWORD: notificationservice
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notificationservice -d notificationservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: roadscanner-redis
@@ -168,3 +185,4 @@ volumes:
   postgres-inventory-data:
   postgres-booking-data:
   postgres-payment-data:
+  postgres-notification-data:

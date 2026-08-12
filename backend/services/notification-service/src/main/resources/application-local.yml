@@ -1,0 +1,55 @@
+# Running on a developer machine: localhost everywhere, matching docker-compose.yml.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5438/notificationservice
+    username: notificationservice
+    password: notificationservice
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+  # SMTP, entirely from the environment.
+  #
+  # Nothing here has a credential as a default, and none may ever be committed. With
+  # NOTIFICATION_EMAIL_HOST unset the service still starts and still consumes events; email
+  # notifications are then recorded FAILED with "no SMTP host configured" rather than being
+  # silently faked — see NotificationChannelConfig.
+  #
+  # For Gmail: host smtp.gmail.com, port 587, username your full address, and an App Password
+  # (not the account password) generated at https://myaccount.google.com/apppasswords with
+  # 2-Step Verification enabled. Export them in your shell profile:
+  #
+  #   export NOTIFICATION_EMAIL_HOST=smtp.gmail.com
+  #   export NOTIFICATION_EMAIL_PORT=587
+  #   export NOTIFICATION_EMAIL_USERNAME='you@gmail.com'
+  #   export NOTIFICATION_EMAIL_PASSWORD='<16-character app password>'
+  #   export NOTIFICATION_EMAIL_FROM='RoadScanner <you@gmail.com>'
+  #
+  # The recipient is never configured — it comes from the booking's contact details, which is the
+  # address the traveller entered at checkout.
+  mail:
+    host: ${NOTIFICATION_EMAIL_HOST:}
+    port: ${NOTIFICATION_EMAIL_PORT:587}
+    username: ${NOTIFICATION_EMAIL_USERNAME:}
+    password: ${NOTIFICATION_EMAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # Bounded so a wedged mail server cannot hold a consumer thread indefinitely.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+roadscanner:
+  notification:
+    email:
+      host: ${NOTIFICATION_EMAIL_HOST:}
+      from: ${NOTIFICATION_EMAIL_FROM:RoadScanner <no-reply@roadscanner.local>}
+
+logging:
+  level:
+    com.roadscanner.notificationservice: DEBUG

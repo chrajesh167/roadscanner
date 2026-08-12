@@ -9,6 +9,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /** Implements {@link BookingEventPublisher}. A publish failure is logged, not thrown — the
  * Postgres write (already durable by the time any of these methods is called) is what makes the
@@ -43,9 +44,20 @@ class BookingEventPublisherAdapter implements BookingEventPublisher {
     }
 
     private void publish(BookingEventType eventType, Booking booking, Instant occurredAt) {
+        // Every added field is read straight off the aggregate already in hand — no lookup, and
+        // nothing that could fail. The booking reference is absent until the provider confirms, so
+        // a CREATED or a pre-confirmation CANCELLED carries null rather than a placeholder.
         BookingEventMessage message = new BookingEventMessage(eventType, booking.id().value(), booking.travelerId(),
                 booking.tripId().value(), booking.status().name(),
-                booking.cancellationReason().map(Enum::name).orElse(null), occurredAt);
+                booking.cancellationReason().map(Enum::name).orElse(null), occurredAt,
+                UUID.randomUUID(),
+                booking.providerBookingReference().orElse(null),
+                booking.contact().email(),
+                booking.contact().phone(),
+                booking.contact().communicationPreference().name(),
+                booking.tripDepartureTime(),
+                booking.fare().amount(),
+                booking.fare().currency().getCurrencyCode());
         String topic = properties.kafka().bookingEventsTopic();
         kafkaTemplate.send(topic, booking.id().value().toString(), message).whenComplete((result, ex) -> {
             if (ex != null) {

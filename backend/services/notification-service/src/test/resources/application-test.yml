@@ -1,0 +1,18 @@
+# Test profile — Testcontainers provides datasource + Kafka via @ServiceConnection. Base topic
+# values come from application.yml (profiles are additive).
+#
+# No SMTP host is set, deliberately. Tests must never be able to send real mail, and the
+# unconfigured adapter's honest FAILED outcome is itself part of what the end-to-end test asserts.
+spring:
+  jpa:
+    show-sql: false
+
+roadscanner:
+  notification:
+    email:
+      host: ""
+      from: RoadScanner <no-reply@roadscanner.test>
+
+logging:
+  level:
+    com.roadscanner.notificationservice: INFO

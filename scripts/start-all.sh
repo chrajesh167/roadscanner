@@ -27,6 +27,11 @@ START_UI=true
 
 # name:port. Order matters only for readability — Spring Boot services boot independently and
 # resolve each other lazily on the first call, so none blocks on another's startup.
+#
+# notification-service inherits its SMTP credentials from this shell's environment
+# (NOTIFICATION_EMAIL_*, see its application-local.yml). They are deliberately not set here and
+# never committed. With them unset the service still starts and still consumes booking-events;
+# email is then recorded FAILED in notification_log rather than silently faked.
 SERVICES=(
   "auth-service:8081"
   "provider-integration-service:8083"
@@ -34,6 +39,7 @@ SERVICES=(
   "search-service:8082"
   "booking-service:8085"
   "payment-service:8086"
+  "notification-service:8087"
 )
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; BOLD=$'\033[1m'; NC=$'\033[0m'
@@ -75,7 +81,7 @@ fi
 
 # ---------------------------------------------------------------- infrastructure
 
-info "Starting infrastructure (Postgres x6, Redis, Kafka)"
+info "Starting infrastructure (Postgres x7, Redis, Kafka)"
 docker compose -f "$REPO_ROOT/docker-compose.yml" up -d >/dev/null
 ok "Containers requested"
 
@@ -181,6 +187,7 @@ ${BOLD}RoadScanner is running${NC}
   inventory   http://localhost:8084     swagger: /swagger-ui.html
   booking     http://localhost:8085     swagger: /swagger-ui.html
   payment     http://localhost:8086     swagger: /swagger-ui.html
+  notify      http://localhost:8087     swagger: /swagger-ui.html
 
   Logs        tail -f logs/<service>.log
   Stop        ./scripts/stop-all.sh

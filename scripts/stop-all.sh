@@ -23,8 +23,8 @@ ok()   { echo "  ${GREEN}✓${NC} $*"; }
 warn() { echo "  ${YELLOW}!${NC} $*"; }
 
 NAMES=(auth-service search-service provider-integration-service inventory-service
-       booking-service payment-service customer-web)
-PORTS=(8081 8082 8083 8084 8085 8086 5173)
+       booking-service payment-service notification-service customer-web)
+PORTS=(8081 8082 8083 8084 8085 8086 8087 5173)
 
 info "Stopping application processes"
 for name in "${NAMES[@]}"; do
@@ -60,7 +60,7 @@ case "$MODE" in
     ;;
   --wipe)
     echo
-    warn "${RED}This deletes every local database volume (auth, search, provider, inventory, booking, payment).${NC}"
+    warn "${RED}This deletes every local database volume (auth, search, provider, inventory, booking, payment, notification).${NC}"
     read -r -p "  Type 'wipe' to confirm: " confirm
     if [[ "$confirm" == "wipe" ]]; then
       docker compose -f "$REPO_ROOT/docker-compose.yml" down -v >/dev/null 2>&1
