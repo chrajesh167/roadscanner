@@ -4,6 +4,8 @@ import com.roadscanner.inventoryservice.application.usecase.availability.GetTrip
 import com.roadscanner.inventoryservice.application.usecase.catalog.BrowseCitiesService;
 import com.roadscanner.inventoryservice.application.usecase.catalog.BrowseStationsService;
 import com.roadscanner.inventoryservice.application.usecase.catalog.GetProviderMappingService;
+import com.roadscanner.inventoryservice.application.usecase.catalog.LinkCityToCanonicalLocationService;
+import com.roadscanner.inventoryservice.application.usecase.catalog.ResolveProviderTripService;
 import com.roadscanner.inventoryservice.application.usecase.catalog.GetSeatLayoutService;
 import com.roadscanner.inventoryservice.application.usecase.catalog.GetSyncStatusService;
 import com.roadscanner.inventoryservice.application.usecase.catalog.GetTripMetadataService;
@@ -18,6 +20,8 @@ import com.roadscanner.inventoryservice.domain.model.ProviderType;
 import com.roadscanner.inventoryservice.domain.port.in.BrowseCities;
 import com.roadscanner.inventoryservice.domain.port.in.BrowseStations;
 import com.roadscanner.inventoryservice.domain.port.in.GetProviderMapping;
+import com.roadscanner.inventoryservice.domain.port.in.LinkCityToCanonicalLocation;
+import com.roadscanner.inventoryservice.domain.port.in.ResolveProviderTrip;
 import com.roadscanner.inventoryservice.domain.port.in.GetSeatLayout;
 import com.roadscanner.inventoryservice.domain.port.in.GetSyncStatus;
 import com.roadscanner.inventoryservice.domain.port.in.GetTripAvailability;
@@ -79,6 +83,16 @@ public class UseCaseConfig {
     @Bean
     public GetProviderMapping getProviderMapping(ProviderMappingRepository providerMappingRepository) {
         return new GetProviderMappingService(providerMappingRepository);
+    }
+
+    @Bean
+    public ResolveProviderTrip resolveProviderTrip(ProviderMappingRepository providerMappingRepository) {
+        return new ResolveProviderTripService(providerMappingRepository);
+    }
+
+    @Bean
+    public LinkCityToCanonicalLocation linkCityToCanonicalLocation(CityRepository cityRepository) {
+        return new LinkCityToCanonicalLocationService(cityRepository);
     }
 
     @Bean

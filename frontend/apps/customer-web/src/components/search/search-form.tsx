@@ -41,8 +41,8 @@ export function SearchForm({
   } = useForm<SearchValues>({
     resolver: zodResolver(searchSchema),
     defaultValues: {
-      origin: defaultValues?.origin ?? '',
-      destination: defaultValues?.destination ?? '',
+      origin: defaultValues?.origin ?? { name: '', id: null },
+      destination: defaultValues?.destination ?? { name: '', id: null },
       date: defaultValues?.date ?? today,
     },
   });
@@ -51,22 +51,31 @@ export function SearchForm({
   // it during render would make the client's first paint disagree with the server's HTML.
   React.useEffect(() => {
     if (!defaultValues?.origin && defaultOrigin) {
-      setValue('origin', defaultOrigin);
+      // A stored preference is a name only — it was saved before ids were carried, and a name
+      // cannot be resolved to an id without asking the catalogue. It searches the index; picking
+      // the place from the list is what makes providers reachable.
+      setValue('origin', { name: defaultOrigin, id: null });
     }
   }, [defaultOrigin, defaultValues?.origin, setValue]);
 
   function swap() {
     const { origin, destination } = getValues();
+    // Swaps the whole place, id included — swapping names alone would leave each id attached to
+    // the wrong end of the route.
     setValue('origin', destination, { shouldValidate: true });
     setValue('destination', origin, { shouldValidate: true });
   }
 
   function onSubmit(values: SearchValues) {
     const params = new URLSearchParams({
-      origin: values.origin.trim(),
-      destination: values.destination.trim(),
+      origin: values.origin.name.trim(),
+      destination: values.destination.name.trim(),
       date: values.date,
     });
+    // Ids ride in the URL alongside the names so a shared or reloaded results link federates
+    // exactly as the original search did — the URL stays the whole query.
+    if (values.origin.id) params.set('originLocationId', values.origin.id);
+    if (values.destination.id) params.set('destinationLocationId', values.destination.id);
     router.push(`/search/results?${params.toString()}`);
   }
 
@@ -79,7 +88,7 @@ export function SearchForm({
       )}
     >
       <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr_auto_auto] md:items-end md:gap-3">
-        <Field label="From" htmlFor="origin" error={errors.origin?.message}>
+        <Field label="From" htmlFor="origin" error={errors.origin?.name?.message}>
           <Controller
             control={control}
             name="origin"
@@ -89,7 +98,7 @@ export function SearchForm({
                 value={field.value}
                 onChange={field.onChange}
                 placeholder="Bengaluru"
-                invalid={Boolean(errors.origin)}
+                invalid={Boolean(errors.origin?.name)}
               />
             )}
           />
@@ -106,7 +115,7 @@ export function SearchForm({
           <ArrowLeftRight />
         </Button>
 
-        <Field label="To" htmlFor="destination" error={errors.destination?.message}>
+        <Field label="To" htmlFor="destination" error={errors.destination?.name?.message}>
           <Controller
             control={control}
             name="destination"
@@ -116,7 +125,7 @@ export function SearchForm({
                 value={field.value}
                 onChange={field.onChange}
                 placeholder="Chennai"
-                invalid={Boolean(errors.destination)}
+                invalid={Boolean(errors.destination?.name)}
                 icon={<Navigation />}
               />
             )}

@@ -1,8 +1,10 @@
 package com.roadscanner.inventoryservice.adapter.in.rest.exception;
 
 import com.roadscanner.inventoryservice.adapter.in.rest.filter.CorrelationIdFilter;
+import com.roadscanner.inventoryservice.domain.exception.CityNotFoundException;
 import com.roadscanner.inventoryservice.domain.exception.InventoryServiceException;
 import com.roadscanner.inventoryservice.domain.exception.ProviderMappingNotFoundException;
+import com.roadscanner.inventoryservice.domain.exception.ProviderTripNotMappedException;
 import com.roadscanner.inventoryservice.domain.exception.SeatLayoutNotFoundException;
 import com.roadscanner.inventoryservice.domain.exception.TripNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -90,6 +92,31 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleProviderMappingNotFound(ProviderMappingNotFoundException ex, HttpServletRequest request) {
         log.info("Provider mapping not found on {}: {}", request.getRequestURI(), ex.tripId());
         return problem(HttpStatus.NOT_FOUND, "No provider mapping for this trip", NOT_FOUND_TYPE, request);
+    }
+
+    @ExceptionHandler(ProviderTripNotMappedException.class)
+    public ProblemDetail handleProviderTripNotMapped(ProviderTripNotMappedException ex, HttpServletRequest request) {
+        log.info("Provider trip not mapped on {}: {}/{}", request.getRequestURI(), ex.providerType().code(),
+                ex.providerTripId());
+        return problem(HttpStatus.NOT_FOUND, "No catalog trip mapped to that provider trip", NOT_FOUND_TYPE, request);
+    }
+
+    @ExceptionHandler(CityNotFoundException.class)
+    public ProblemDetail handleCityNotFound(CityNotFoundException ex, HttpServletRequest request) {
+        log.info("City not found on {}: {}", request.getRequestURI(), ex.cityId());
+        return problem(HttpStatus.NOT_FOUND, "No such city", NOT_FOUND_TYPE, request);
+    }
+
+    /**
+     * 409, not 400: re-linking a city to a different canonical location is refused because trips
+     * already synchronised under the old one would be orphaned, which is a conflict with existing
+     * state rather than a malformed request. A caller that reads only the status should be able to
+     * tell "you sent nonsense" from "this is already claimed".
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ProblemDetail handleConflictingState(IllegalStateException ex, HttpServletRequest request) {
+        log.warn("Conflicting state on {}: {}", request.getRequestURI(), ex.getMessage());
+        return problem(HttpStatus.CONFLICT, ex.getMessage(), VALIDATION_TYPE, request);
     }
 
     @ExceptionHandler(InventoryServiceException.class)

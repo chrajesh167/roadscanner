@@ -47,6 +47,37 @@ No local Maven install required — use the wrapper (`./mvnw`).
 
 ## Running Locally
 
+### Prerequisite: the credential-encryption key
+
+The `local` profile **requires** `PROVIDER_CREDENTIAL_ENCRYPTION_KEY`. Startup fails with an
+actionable message without it — deliberately. This profile used to generate a throwaway key at
+every startup, which meant a partner token stored through the admin console decrypted fine until
+the next restart and then never again: the `provider_credentials` row survived, the key did not.
+Nothing failed loudly, so the data loss looked identical to the provider rejecting the credentials.
+
+Generate one **once** and keep reusing it — the same key must be present on every subsequent start
+or previously stored credentials become unreadable:
+
+```bash
+# a 32-byte (AES-256) key, base64-encoded. 16 and 24 bytes are also accepted.
+openssl rand -base64 32
+```
+
+Export it in your shell profile (`~/.zshrc`) so every run picks it up:
+
+```bash
+export PROVIDER_CREDENTIAL_ENCRYPTION_KEY='<paste the generated value>'
+```
+
+**Never commit this value.** It is a local development key, not a shared one — generate your own
+rather than copying a teammate's, and do not paste it into any file in this repository. Deployed
+environments are unchanged: they read the same property from the secrets manager, and
+`ephemeral-key` is not set anywhere outside the test profile.
+
+Rotating the key is a destructive act locally: existing `provider_credentials` rows were encrypted
+under the old one and cannot be recovered. Re-enter the credentials through the admin console after
+changing it.
+
 ```bash
 # from the repo root: start Postgres + Redis + Kafka
 docker compose up -d
@@ -83,8 +114,13 @@ curl -s -X POST "http://localhost:8083/internal/api/v1/providers/MOCK/sessions/$
 
 ```bash
 docker build -t roadscanner/provider-integration-service .
-docker run --network host -e SPRING_PROFILES_ACTIVE=local -p 8083:8083 roadscanner/provider-integration-service
+docker run --network host -e SPRING_PROFILES_ACTIVE=local \
+  -e PROVIDER_CREDENTIAL_ENCRYPTION_KEY="$PROVIDER_CREDENTIAL_ENCRYPTION_KEY" \
+  -p 8083:8083 roadscanner/provider-integration-service
 ```
+
+The key is forwarded from your shell rather than baked into the image — an image carrying a
+credential-encryption key would ship it to anyone who pulls it.
 
 (`docker-compose.yml` intentionally does not include `provider-integration-service` itself — same
 rationale as `auth-service`/`search-service`'s identical omission.)
@@ -124,9 +160,14 @@ with it out of the box, no extra environment configuration needed.
 
 | Profile | Use | Datasource / Redis / Kafka / FlixBus |
 |---|---|---|
-| `local` | Running on a developer machine | `localhost`, matching `docker-compose.yml`; FlixBus base URL/credentials are placeholder values (see "Remaining Integration Points") |
+| `local` | Running on a developer machine | `localhost`, matching `docker-compose.yml`; FlixBus points at the real B2B host (override with `FLIXBUS_BASE_URL`), credentials are still absent — see "Remaining Integration Points". Requires `PROVIDER_CREDENTIAL_ENCRYPTION_KEY` — see "Running Locally" |
 | `dev` | Deployed dev environment | Every value from an env var, no hardcoded fallback for secrets |
 | `test` | Test execution | Only non-infrastructure properties; datasource/Redis/Kafka come from Testcontainers via `@ServiceConnection` |
+
+`ephemeral-key: true` is set **only** in the `test` profile, where a throwaway key per JVM is
+correct: tests exercise real encryption and never need to read a row written by an earlier process.
+No other profile opts into it, so `local`, `dev` and production all fail loudly on a missing key
+rather than silently generating one.
 
 No profile is active by default — a missing profile should fail loudly, matching
 `auth-service`/`search-service`'s convention.
@@ -195,9 +236,11 @@ this codebase.
 Implemented but awaiting other platform components or a deliberate operational decision (tracked,
 not forgotten):
 
-- **No real FlixBus base URL or credentials.** The `FLIXBUS` row in `provider_configurations` is
-  seeded `enabled=false`; flipping it on is a config change (`FLIXBUS_BASE_URL`,
-  `FLIXBUS_CLIENT_ID`, `FLIXBUS_CLIENT_SECRET` env vars in the `dev` profile), not a code change.
+- **No real FlixBus credentials.** The base URL is now the real B2B host (`V8` corrected the
+  seeded row, and `local`/`dev` both resolve it from configuration), but the `FLIXBUS` row stays
+  `enabled=false` until a partner token is stored through the admin API. Flipping it on is a
+  config change (`FLIXBUS_BASE_URL`, `FLIXBUS_CLIENT_ID`, `FLIXBUS_CLIENT_SECRET` env vars in the
+  `dev` profile), not a code change.
 - **`booking-service`, `search-service`, and `inventory-service` don't exist yet**, so nothing
   calls this service in a real environment today — every endpoint is implemented and tested
   against the Mock provider and hand-issued requests.

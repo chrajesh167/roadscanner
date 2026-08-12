@@ -18,6 +18,14 @@ import java.util.List;
  *
  * <p>{@code providerSearchComplete} is false when at least one provider failed, so a caller can
  * tell a partial answer from a complete one instead of presenting it as the whole market.
+ *
+ * <p>A departure can legitimately appear in both lists: catalog sync imports provider trips, so the
+ * same bus is both an indexed trip and a live provider result. This response reports both and links
+ * them through {@link ProviderTripResponse#catalogTripId()} rather than dropping either. Suppressing
+ * the indexed twin here would silently disagree with {@code totalElements} and {@code totalPages},
+ * which are counts over the index, and would leave a page holding fewer rows than its own
+ * {@code size} claims. Choosing which of two representations of one bus to show is a presentation
+ * decision, and it is made where the identity link is now available to make it.
  */
 public record SearchResultResponse(
         List<TripResponse> content,
@@ -32,18 +40,26 @@ public record SearchResultResponse(
     /** Index-only answer, for callers that did not supply canonical location ids. */
     public static SearchResultResponse from(ResultPage<TripSearchResult> page) {
         return from(page, com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result
-                .empty());
+                .empty(), java.util.Map.of());
     }
 
+    /**
+     * @param catalogTripIds catalog trip id per provider trip id, for those provider trips catalog
+     *                       sync has already imported. Absent entries are trips with no catalog
+     *                       identity — see {@link ProviderTripResponse}.
+     */
     public static SearchResultResponse from(ResultPage<TripSearchResult> page,
-            com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result providerResult) {
+            com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result providerResult,
+            java.util.Map<String, java.util.UUID> catalogTripIds) {
         return new SearchResultResponse(
                 page.content().stream().map(TripResponse::from).toList(),
                 page.page(),
                 page.size(),
                 page.totalElements(),
                 page.totalPages(),
-                providerResult.trips().stream().map(ProviderTripResponse::from).toList(),
+                providerResult.trips().stream()
+                        .map(trip -> ProviderTripResponse.from(trip, catalogTripIds.get(trip.providerTripId())))
+                        .toList(),
                 providerResult.complete());
     }
 }

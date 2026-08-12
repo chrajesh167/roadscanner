@@ -35,6 +35,12 @@ public class CityJpaEntity {
     protected CityJpaEntity() {
     }
 
+    /** The one mutable field, and the only write this service makes to a city: the canonical
+     * location link, which no seed can carry because canonical ids are minted per environment. */
+    void linkCanonicalLocation(UUID canonicalLocationId) {
+        this.locationId = canonicalLocationId;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -28,11 +28,10 @@ if (!window.ResizeObserver) {
   };
 }
 
-// jsdom does not expose one in this configuration, and zustand's `persist` resolves its storage
-// once at module evaluation: with none present it builds a backing object whose methods dereference
-// `undefined`, so the first write to the auth store throws rather than degrading. Anything
-// rendering a guard or a signed-in view touches that store, so the polyfill has to exist before
-// the first import, not inside a test.
+// zustand's `persist` resolves its storage once at module evaluation; with none present it builds a
+// backing object whose methods dereference `undefined`, so the first store write throws rather than
+// degrading. The preferences store is touched by the search form, so this has to exist before the
+// first import rather than inside a test.
 if (!globalThis.localStorage) {
   const entries = new Map<string, string>();
   const storage: Storage = {

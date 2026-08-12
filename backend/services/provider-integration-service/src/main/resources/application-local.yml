@@ -27,9 +27,22 @@ management:
 roadscanner:
   security:
     credential-encryption:
-      # Local development only: a throwaway key generated at startup. Credentials written now
-      # cannot be read after a restart — same trade-off as the ephemeral JWT keys below.
-      ephemeral-key: true
+      # A stable local key, supplied by the environment — NOT a throwaway one.
+      #
+      # This used to be `ephemeral-key: true`, which generated a fresh key every startup. Because
+      # the cipher is what protects `provider_credentials`, that meant a partner token stored
+      # through the admin console decrypted fine until the next restart and then never again — the
+      # row survived, the key did not. Anyone entering real FlixBus credentials locally lost them
+      # on the next `mvn spring-boot:run` and had no way to tell why.
+      #
+      # `ephemeral-key` is deliberately NOT set here rather than set to false: CredentialEncryption-
+      # Config treats a missing key with no explicit opt-out as a startup failure, and that is the
+      # behaviour we want locally. An unset PROVIDER_CREDENTIAL_ENCRYPTION_KEY now stops the service
+      # with an actionable message instead of silently minting a key that discards tomorrow's data.
+      #
+      # Generate one once and export it — see backend/services/provider-integration-service/README.md.
+      # Never commit the value; this file carries the reference, never the key.
+      key: ${PROVIDER_CREDENTIAL_ENCRYPTION_KEY:}
     jwt:
       # ---------------------------------------------------------------------------------------
       # auth-service's SHARED DEVELOPMENT public key. NOT A SECRET, and the private half is not
@@ -59,10 +72,18 @@ roadscanner:
     allowed-origins: http://localhost:5173,http://localhost:5174
   provider:
     flixbus:
-      # Placeholder — RoadScanner has no real FlixBus B2B base URL or credentials yet (see
-      # README.md "Remaining Integration Points"). The FLIXBUS provider row is seeded
-      # enabled=false, so nothing calls this URL until it's replaced with a real one.
-      base-url: https://flixbus.example.invalid
+      # The real B2B host, matching what V8 already wrote to provider_configurations.base_url.
+      #
+      # This was `https://flixbus.example.invalid` — correct while the FLIXBUS row was seeded
+      # enabled=false and nothing called it. Once the row was enabled and credentials stored, every
+      # federated search resolved that deliberately-unresolvable domain and failed DNS before a
+      # request left the machine, which surfaced as an empty result rather than a configuration
+      # error: the adapter reads its base URL from here, never from the database column, so
+      # correcting the row in V8 had no effect on the HTTP client.
+      #
+      # Overridable so a sandbox host can be pointed at without editing this file, matching the
+      # dev profile's ${FLIXBUS_BASE_URL} convention.
+      base-url: ${FLIXBUS_BASE_URL:https://global.api.flixbus.com}
 
 logging:
   level:

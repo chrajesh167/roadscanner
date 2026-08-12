@@ -36,3 +36,20 @@ export function useSuggestions(query: string) {
     staleTime: 5 * 60_000,
   });
 }
+
+/**
+ * Canonical locations, ids included — what the origin/destination fields select from.
+ *
+ * Replaces {@link useSuggestions} for those fields specifically. The bare-string endpoint stays for
+ * any caller that only needs names, but a place picked without its id cannot be federated to a
+ * provider, so the fields that feed a search need this one.
+ */
+export function useLocationSuggestions(query: string) {
+  const trimmed = query.trim();
+  return useQuery({
+    queryKey: queryKeys.locations.search(trimmed),
+    queryFn: () => searchEndpoints.locations(trimmed, 8),
+    enabled: trimmed.length >= 2,
+    staleTime: 5 * 60_000,
+  });
+}

@@ -1,5 +1,7 @@
 import { searchApi } from '../client';
 import type {
+  LocationSuggestion,
+  LocationSuggestionsResponse,
   SearchResultResponse,
   SearchSuggestionsResponse,
   SearchTripsParams,
@@ -27,6 +29,20 @@ export const searchEndpoints = {
   async suggestions(query: string, maxResults?: number): Promise<string[]> {
     const { data } = await searchApi.get<SearchSuggestionsResponse>('/api/v1/search/suggestions', {
       params: { query, maxResults },
+    });
+    return data.suggestions;
+  },
+
+  /**
+   * GET /api/v1/locations — the canonical catalogue, ids included.
+   *
+   * Distinct from `suggestions`, which returns bare strings: a name alone cannot be federated to a
+   * provider, because the translation table that names cities in a provider's own vocabulary is
+   * keyed by canonical location id. This is where the origin/destination fields get theirs.
+   */
+  async locations(query: string, limit?: number): Promise<LocationSuggestion[]> {
+    const { data } = await searchApi.get<LocationSuggestionsResponse>('/api/v1/locations', {
+      params: { q: query, limit },
     });
     return data.suggestions;
   },

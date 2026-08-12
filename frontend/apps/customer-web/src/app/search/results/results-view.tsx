@@ -12,6 +12,7 @@ import { PageShell } from '@/components/layout/page-shell';
 import { SearchForm } from '@/components/search/search-form';
 import { ResultFilters, type FilterValues } from '@/components/search/result-filters';
 import { TripCard, TripCardSkeleton } from '@/components/search/trip-card';
+import { ProviderResultsHeader, ProviderTripCard } from '@/components/search/provider-trip-card';
 import { useSearchTrips } from '@/lib/hooks/use-search';
 import { formatRelativeDay } from '@/lib/utils/format';
 import type { SearchTripsParams, SortOption } from '@/lib/api/types';
@@ -25,6 +26,10 @@ export function ResultsView() {
   const origin = searchParams.get('origin') ?? '';
   const destination = searchParams.get('destination') ?? '';
   const date = searchParams.get('date') ?? '';
+  // Present only when the traveller picked the place from the catalogue. Both or neither: the
+  // backend federates only with both, and a single id names no route.
+  const originLocationId = searchParams.get('originLocationId') ?? undefined;
+  const destinationLocationId = searchParams.get('destinationLocationId') ?? undefined;
   const page = Number.parseInt(searchParams.get('page') ?? '0', 10) || 0;
 
   const [filters, setFilters] = React.useState<FilterValues>(() => ({
@@ -61,10 +66,49 @@ export function ResultsView() {
       busType: appliedFilters.busType?.trim() || undefined,
       minRating: numeric(appliedFilters.minRating),
       sort: appliedFilters.sort || undefined,
+      originLocationId,
+      destinationLocationId,
     };
-  }, [hasRoute, origin, destination, date, page, appliedFilters]);
+  }, [
+    hasRoute,
+    origin,
+    destination,
+    date,
+    page,
+    appliedFilters,
+    originLocationId,
+    destinationLocationId,
+  ]);
 
   const { data, isLoading, isFetching, isError, error, refetch } = useSearchTrips(params);
+
+  // Memoised rather than defaulted inline: a fresh [] each render would re-run every memo below
+  // it on every render, defeating the point of memoising them.
+  const providerTrips = React.useMemo(() => data?.providerTrips ?? [], [data?.providerTrips]);
+
+  /*
+   * Catalog sync imports provider trips, so the same departure legitimately arrives twice: once
+   * live under `providerTrips`, once indexed under `content`. Showing both would offer the same bus
+   * twice.
+   *
+   * Identity is `providerTripId`, expressed through the `catalogTripId` the backend resolved from
+   * it — inventory's mapping table is unique on that pair, so the link is authoritative. Matching on
+   * operator, price, departure time or city names would be guesswork that collapses genuinely
+   * different departures.
+   *
+   * The live copy wins: it was fetched this second, and its seat count and fare are current, where
+   * the indexed row is as fresh as the last sync. The server still returns both, so pagination and
+   * `totalElements` stay exactly what the index says — only the presentation chooses.
+   */
+  const providerCatalogTripIds = React.useMemo(
+    () => new Set(providerTrips.map((trip) => trip.catalogTripId).filter(Boolean) as string[]),
+    [providerTrips],
+  );
+  const indexedTrips = React.useMemo(
+    () => (data?.content ?? []).filter((trip) => !providerCatalogTripIds.has(trip.tripId)),
+    [data?.content, providerCatalogTripIds],
+  );
+  const hasAnyResult = providerTrips.length > 0 || indexedTrips.length > 0;
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams.toString());
@@ -140,7 +184,16 @@ export function ResultsView() {
       }
     >
       <div className="mb-8">
-        <SearchForm variant="compact" defaultValues={{ origin, destination, date }} />
+        {/* Echoes the current query back, ids included, so refining a search does not silently
+            drop the canonical places the traveller already picked. */}
+        <SearchForm
+          variant="compact"
+          defaultValues={{
+            origin: { name: origin, id: originLocationId ?? null },
+            destination: { name: destination, id: destinationLocationId ?? null },
+            date,
+          }}
+        />
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
@@ -155,11 +208,15 @@ export function ResultsView() {
             </div>
           ) : isError ? (
             <ErrorState error={error} onRetry={() => void refetch()} />
-          ) : !data || data.content.length === 0 ? (
+          ) : !data || !hasAnyResult ? (
             <EmptyState
               icon={<SearchX />}
               title="No trips on this route"
-              description="Nothing matches this date and these filters. Try a nearby date or clear your filters."
+              description={
+                data && !data.providerSearchComplete
+                  ? 'Some providers are temporarily unavailable, so this may not be the whole picture. Try again shortly, or try a nearby date.'
+                  : 'Nothing matches this date and these filters. Try a nearby date or clear your filters.'
+              }
               action={
                 <Button variant="secondary" onClick={resetFilters}>
                   Clear filters
@@ -175,8 +232,29 @@ export function ResultsView() {
                 animate={{ opacity: isFetching ? 0.55 : 1 }}
                 transition={{ duration: 0.2 }}
               >
+                {/* Live provider results lead: they are the freshest inventory in the answer, and
+                    the section is labelled so nobody has to guess which is which. */}
+                {providerTrips.length > 0 && (
+                  <section aria-label="Provider buses">
+                    <ProviderResultsHeader complete={data.providerSearchComplete} />
+                    <div className="flex flex-col gap-4">
+                      {providerTrips.map((trip) => (
+                        <ProviderTripCard key={`${trip.providerCode}:${trip.providerTripId}`} trip={trip} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* A partial answer is stated even when no provider returned anything, so an
+                    outage never reads as an empty market. */}
+                {providerTrips.length === 0 && !data.providerSearchComplete && (
+                  <p className="text-caption text-warning">
+                    Some providers are temporarily unavailable — this list may be incomplete.
+                  </p>
+                )}
+
                 <AnimatePresence mode="popLayout">
-                  {data.content.map((trip, index) => (
+                  {indexedTrips.map((trip, index) => (
                     <motion.div
                       key={trip.tripId}
                       layout

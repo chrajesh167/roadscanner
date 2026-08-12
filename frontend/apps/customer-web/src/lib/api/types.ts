@@ -72,6 +72,37 @@ export interface RequestPasswordResetRequest {
 
 export type SortOption = 'PRICE_ASC' | 'PRICE_DESC' | 'DEPARTURE_TIME_ASC' | 'DURATION_ASC';
 
+/**
+ * One place in the platform's canonical catalogue — `GET /api/v1/locations`.
+ *
+ * The `id` is what makes a place actionable rather than merely typed: provider search is keyed by
+ * canonical location, never by a name. A place the traveller typed but did not pick from the list
+ * has no id, and that is a real state rather than an error — see `SelectedPlace`.
+ */
+export interface LocationSuggestion {
+  id: string;
+  displayName: string;
+  city: string;
+  state: string | null;
+  country: string;
+}
+
+export interface LocationSuggestionsResponse {
+  suggestions: LocationSuggestion[];
+}
+
+/**
+ * What the origin/destination field carries.
+ *
+ * `id` is null for free text: the traveller can still search — indexed results match on name — but
+ * no provider is asked, because guessing which canonical location a typed name meant is exactly the
+ * mistranslation that puts someone on a bus to the wrong city.
+ */
+export interface SelectedPlace {
+  name: string;
+  id: string | null;
+}
+
 export interface SearchTripsParams {
   origin: string;
   destination: string;
@@ -85,6 +116,9 @@ export interface SearchTripsParams {
   sort?: SortOption;
   page?: number;
   size?: number;
+  /** Both or neither: a single id names no route, and the backend federates only when it has both. */
+  originLocationId?: string;
+  destinationLocationId?: string;
 }
 
 export interface TripResponse {
@@ -108,12 +142,43 @@ export interface TripResponse {
   availabilityKnown: boolean;
 }
 
+/**
+ * A live trip from an external provider, fetched per request rather than read from the index.
+ *
+ * `catalogTripId` is what makes it selectable: the provider names its trip with `providerTripId`,
+ * but every booking step is keyed by a catalog trip id. Null means catalog sync has not imported
+ * this departure — the trip is real and shown, but nothing can be booked against it yet.
+ *
+ * It is also the identity link: an indexed trip whose `tripId` equals a provider trip's
+ * `catalogTripId` is the same departure, imported earlier, not a second bus.
+ */
+export interface ProviderTripResponse {
+  providerCode: string;
+  providerTripId: string;
+  operatorName: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
+  arrivalTime: string;
+  serviceClass: string | null;
+  fareAmount: string;
+  fareCurrency: string;
+  seatsAvailable: number;
+  boardingPointId: string | null;
+  alightingPointId: string | null;
+  catalogTripId: string | null;
+}
+
 export interface SearchResultResponse {
   content: TripResponse[];
   page: number;
   size: number;
   totalElements: number;
   totalPages: number;
+  /** Live provider results. Present only when both canonical location ids were sent. */
+  providerTrips: ProviderTripResponse[];
+  /** False when at least one provider failed — a partial answer, not an empty market. */
+  providerSearchComplete: boolean;
 }
 
 export interface SearchSuggestionsResponse {

@@ -40,9 +40,18 @@ export const registerSchema = z
 export type RegisterValues = z.infer<typeof registerSchema>;
 
 // search-service: origin/destination @NotBlank, date ISO_DATE
+// A place is its name plus, when the traveller picked it from the catalogue, its canonical id.
+// The id is deliberately not required: typing a name still searches the index, it simply cannot
+// reach a provider. Requiring it would turn a working search into a validation error.
+const placeSchema = (message: string) =>
+  z.object({
+    name: z.string().trim().min(1, message),
+    id: z.string().nullable(),
+  });
+
 export const searchSchema = z.object({
-  origin: z.string().trim().min(1, 'Where are you starting from?'),
-  destination: z.string().trim().min(1, 'Where are you going?'),
+  origin: placeSchema('Where are you starting from?'),
+  destination: placeSchema('Where are you going?'),
   date: z.string().min(1, 'Pick a travel date'),
 });
 export type SearchValues = z.infer<typeof searchSchema>;

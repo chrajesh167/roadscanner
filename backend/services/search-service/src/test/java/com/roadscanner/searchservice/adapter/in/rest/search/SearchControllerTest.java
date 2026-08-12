@@ -61,6 +61,9 @@ class SearchControllerTest {
     @MockBean
     private com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips searchProviderTrips;
 
+    @MockBean
+    private com.roadscanner.searchservice.domain.port.out.CatalogTripResolver catalogTripResolver;
+
     @TestConfiguration
     static class TestConfig {
         @Bean
@@ -86,6 +89,9 @@ class SearchControllerTest {
     void federationReturnsNothingUnlessATestSaysOtherwise() {
         when(searchProviderTrips.search(any())).thenReturn(
                 com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result.empty());
+        // No provider trip resolves to a catalog trip unless a test says otherwise: the default is
+        // the honest one for a departure catalog sync has not imported.
+        when(catalogTripResolver.resolveCatalogTripIds(any())).thenReturn(java.util.Map.of());
     }
 
     @Test
@@ -134,5 +140,94 @@ class SearchControllerTest {
                 .andExpect(status().isOk());
 
         verify(searchTrips).search(argThat(command -> command.query().size() == MAX_PAGE_SIZE));
+    }
+
+    /**
+     * The link that makes a provider trip actionable, and that lets a caller recognise an indexed
+     * trip in the same response as this same departure rather than a second bus.
+     */
+    @Test
+    void exposesTheCatalogTripBackingAProviderTripSoItCanBeSelectedAndRecognised() throws Exception {
+        UUID catalogTripId = UUID.randomUUID();
+        String providerTripId = "MOCK-HYDERABAD-BENGALURU-2026-08-13-AC-SLEEPER";
+        when(searchTrips.search(any())).thenReturn(
+                new SearchTrips.SearchTripsResult(ResultPage.of(List.of(), 0, MAX_PAGE_SIZE, 0)));
+        when(searchProviderTrips.search(any())).thenReturn(
+                new com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result(
+                        List.of(providerTrip(providerTripId)),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK")),
+                        java.util.Set.of()));
+        when(catalogTripResolver.resolveCatalogTripIds(any()))
+                .thenReturn(java.util.Map.of(providerTripId, catalogTripId));
+
+        mockMvc.perform(get("/api/v1/search/trips")
+                        .param("origin", "Hyderabad")
+                        .param("destination", "Bengaluru")
+                        .param("date", "2026-08-13")
+                        .param("originLocationId", UUID.randomUUID().toString())
+                        .param("destinationLocationId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.providerTrips[0].providerCode").value("MOCK"))
+                .andExpect(jsonPath("$.providerTrips[0].providerTripId").value(providerTripId))
+                .andExpect(jsonPath("$.providerTrips[0].catalogTripId").value(catalogTripId.toString()))
+                .andExpect(jsonPath("$.providerSearchComplete").value(true));
+    }
+
+    @Test
+    void aProviderTripCatalogSyncHasNotImportedReportsNoCatalogTripRatherThanAnInventedOne() throws Exception {
+        when(searchTrips.search(any())).thenReturn(
+                new SearchTrips.SearchTripsResult(ResultPage.of(List.of(), 0, MAX_PAGE_SIZE, 0)));
+        when(searchProviderTrips.search(any())).thenReturn(
+                new com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result(
+                        List.of(providerTrip("MOCK-UNIMPORTED-2026-12-31-AC-SLEEPER")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK")),
+                        java.util.Set.of()));
+        when(catalogTripResolver.resolveCatalogTripIds(any())).thenReturn(java.util.Map.of());
+
+        // Shown, because the departure is real; not selectable, because nothing can be booked
+        // against it. A fabricated id here would only move the failure to the seat map.
+        mockMvc.perform(get("/api/v1/search/trips")
+                        .param("origin", "Hyderabad")
+                        .param("destination", "Bengaluru")
+                        .param("date", "2026-12-31")
+                        .param("originLocationId", UUID.randomUUID().toString())
+                        .param("destinationLocationId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.providerTrips[0].catalogTripId").doesNotExist());
+    }
+
+    @Test
+    void aFailedProviderStillReportsAnIncompleteAnswerAlongsideTheTripsThatDidArrive() throws Exception {
+        when(searchTrips.search(any())).thenReturn(
+                new SearchTrips.SearchTripsResult(ResultPage.of(List.of(), 0, MAX_PAGE_SIZE, 0)));
+        when(searchProviderTrips.search(any())).thenReturn(
+                new com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips.Result(
+                        List.of(providerTrip("MOCK-HYDERABAD-BENGALURU-2026-08-13-AC-SLEEPER")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK"),
+                                new com.roadscanner.searchservice.location.domain.model.ProviderCode("FLIXBUS")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("MOCK")),
+                        java.util.Set.of(new com.roadscanner.searchservice.location.domain.model.ProviderCode("FLIXBUS"))));
+
+        mockMvc.perform(get("/api/v1/search/trips")
+                        .param("origin", "Hyderabad")
+                        .param("destination", "Bengaluru")
+                        .param("date", "2026-08-13")
+                        .param("originLocationId", UUID.randomUUID().toString())
+                        .param("destinationLocationId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.providerTrips.length()").value(1))
+                .andExpect(jsonPath("$.providerSearchComplete").value(false));
+    }
+
+    private com.roadscanner.searchservice.domain.model.ProviderTripResult providerTrip(String providerTripId) {
+        return new com.roadscanner.searchservice.domain.model.ProviderTripResult(
+                "MOCK", providerTripId, "Mock Travels",
+                new Route("Hyderabad", "Bengaluru"),
+                new Schedule(Instant.parse("2026-08-13T20:00:00Z"), Instant.parse("2026-08-14T02:00:00Z")),
+                "AC Sleeper",
+                new FareSnapshot(new BigDecimal("899.00"), Currency.getInstance("INR")),
+                29, "mock-point-Hyderabad", "mock-point-Bengaluru");
     }
 }
