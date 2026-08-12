@@ -8,6 +8,7 @@ import com.roadscanner.searchservice.location.domain.model.LocationId;
 import com.roadscanner.searchservice.location.domain.port.in.SearchProviderTrips;
 import java.util.UUID;
 import com.roadscanner.searchservice.domain.port.in.SearchTrips;
+import com.roadscanner.searchservice.domain.port.out.CatalogTripResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -47,12 +48,14 @@ class SearchController {
     private final SearchTrips searchTrips;
     private final SearchProperties searchProperties;
     private final SearchProviderTrips searchProviderTrips;
+    private final CatalogTripResolver catalogTripResolver;
 
     SearchController(SearchTrips searchTrips, SearchProperties searchProperties,
-                     SearchProviderTrips searchProviderTrips) {
+                     SearchProviderTrips searchProviderTrips, CatalogTripResolver catalogTripResolver) {
         this.searchTrips = searchTrips;
         this.searchProperties = searchProperties;
         this.searchProviderTrips = searchProviderTrips;
+        this.catalogTripResolver = catalogTripResolver;
     }
 
     @GetMapping("/trips")
@@ -90,8 +93,9 @@ class SearchController {
         SearchQuery query = new SearchQuery(new Route(origin, destination), date, minFare, maxFare,
                 departureAfter, departureBefore, busType, minRating, sort, resolvedPage, resolvedSize);
         SearchTrips.SearchTripsResult result = searchTrips.search(new SearchTrips.SearchTripsCommand(query));
-        return SearchResultResponse.from(result.results(),
-                federate(originLocationId, destinationLocationId, date));
+        SearchProviderTrips.Result providerResult = federate(originLocationId, destinationLocationId, date);
+        return SearchResultResponse.from(result.results(), providerResult,
+                catalogTripResolver.resolveCatalogTripIds(providerResult.trips()));
     }
 
     private int resolveSize(Integer requestedSize) {

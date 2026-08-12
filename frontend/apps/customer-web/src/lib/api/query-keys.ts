@@ -8,6 +8,9 @@ export const queryKeys = {
     detail: (tripId: string) => ['trips', 'detail', tripId] as const,
     suggestions: (query: string) => ['trips', 'suggestions', query] as const,
   },
+  locations: {
+    search: (query: string) => ['locations', 'search', query] as const,
+  },
   seats: {
     view: (tripId: string) => ['seats', tripId] as const,
   },

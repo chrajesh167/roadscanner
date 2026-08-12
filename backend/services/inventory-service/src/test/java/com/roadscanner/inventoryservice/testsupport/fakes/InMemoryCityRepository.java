@@ -29,4 +29,16 @@ public final class InMemoryCityRepository implements CityRepository {
                 .limit(limit)
                 .toList();
     }
+
+    /** Mirrors the adapter: an existing row is updated, and a city that was never seeded is a
+     * programming error rather than a silent insert. */
+    @Override
+    public City save(City city) {
+        if (!cities.containsKey(city.id())) {
+            throw new IllegalStateException(
+                    "City " + city.id().value() + " does not exist; cities are seeded, never created here");
+        }
+        cities.put(city.id(), city);
+        return city;
+    }
 }

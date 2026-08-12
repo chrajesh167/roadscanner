@@ -30,4 +30,19 @@ class CityRepositoryAdapter implements CityRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    /**
+     * Updates the managed row in place rather than persisting a detached entity built from the
+     * domain object. Cities carry seeded, administratively-owned fields (name, state, country) that
+     * this service must never author; rebuilding an entity here would write them back from whatever
+     * the domain object happened to hold and quietly turn a link into a full overwrite.
+     */
+    @Override
+    public City save(City city) {
+        CityJpaEntity entity = springDataRepository.findById(city.id().value())
+                .orElseThrow(() -> new IllegalStateException(
+                        "City " + city.id().value() + " does not exist; cities are seeded, never created here"));
+        entity.linkCanonicalLocation(city.locationId().orElse(null));
+        return mapper.toDomain(springDataRepository.save(entity));
+    }
 }

@@ -1,8 +1,12 @@
 package com.roadscanner.providerintegrationservice.config;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.roadscanner.providerintegrationservice.adapter.out.security.AesGcmCredentialCipher;
 import com.roadscanner.providerintegrationservice.domain.port.out.CredentialCipher;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -104,6 +108,55 @@ class CredentialEncryptionConfigTest {
                     config.credentialCipher(new CredentialEncryptionProperties(base64Key(length), false));
             assertThat(cipher.decrypt(cipher.encrypt("s3cret"))).isEqualTo("s3cret");
         }
+    }
+
+    /**
+     * Restart safety, stated on its own rather than as a side effect of the ephemeral-flag test.
+     *
+     * <p>This is the guarantee an operator actually depends on: credentials stored yesterday must
+     * decrypt today. It holds only because the key comes from configuration — the ephemeral path
+     * fails this by construction, which is what {@link #everyEphemeralKeyIsDistinct()} pins down.
+     */
+    @Test
+    void aCipherRebuiltFromTheSameKeyDecryptsWhatTheLastOneWrote() {
+        String key = base64Key(32);
+
+        String storedCiphertext =
+                config.credentialCipher(new CredentialEncryptionProperties(key, false)).encrypt("s3cret");
+        CredentialCipher afterRestart = config.credentialCipher(new CredentialEncryptionProperties(key, false));
+
+        assertThat(afterRestart.decrypt(storedCiphertext)).isEqualTo("s3cret");
+    }
+
+    /**
+     * Startup logging is the one place the key and the plaintext could plausibly escape: it runs
+     * before any redaction anyone might add later, and it is the natural spot to "just log the
+     * config" while debugging. The assertion is over captured output rather than over the format
+     * string, so an added argument is caught too.
+     */
+    @Test
+    void logsThatEncryptionIsActiveWithoutRenderingTheKeyOrAnySecret() {
+        String key = base64Key(32);
+        Logger root = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        ListAppender<ILoggingEvent> captured = new ListAppender<>();
+        captured.start();
+        root.addAppender(captured);
+
+        try {
+            CredentialCipher cipher = config.credentialCipher(new CredentialEncryptionProperties(key, false));
+            cipher.decrypt(cipher.encrypt("s3cret"));
+        } finally {
+            root.detachAppender(captured);
+        }
+
+        assertThat(captured.list).isNotEmpty();
+        assertThat(captured.list)
+                .allSatisfy(event -> assertThat(event.getFormattedMessage())
+                        .doesNotContain(key)
+                        .doesNotContain("s3cret"));
+        assertThat(captured.list)
+                .anySatisfy(event -> assertThat(event.getFormattedMessage())
+                        .contains("Provider credential encryption active"));
     }
 
     @Test

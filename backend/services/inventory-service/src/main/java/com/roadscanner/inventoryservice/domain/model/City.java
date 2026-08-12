@@ -42,6 +42,30 @@ public final class City {
         return Optional.ofNullable(locationId);
     }
 
+    /**
+     * Records which canonical location this city is — the administrative act
+     * {@code V3__link_cities_to_canonical_locations.sql} describes but had no mechanism for.
+     *
+     * <p>Returns a new instance rather than mutating: the link is part of the city's identity for
+     * translation purposes, and a setter would let a half-applied change escape into a sync that is
+     * already running.
+     *
+     * <p>Re-linking an already-linked city is refused. Catalog trips are reconciled against the
+     * provider ids that the old location resolved to, so silently repointing it would leave every
+     * existing trip on this route mapped to a provider city this city no longer claims to be —
+     * corruption that surfaces much later, as a booking against the wrong city. Unlinking is not
+     * offered here for the same reason.
+     */
+    public City linkToCanonicalLocation(UUID canonicalLocationId) {
+        Objects.requireNonNull(canonicalLocationId, "canonicalLocationId must not be null");
+        if (locationId != null && !locationId.equals(canonicalLocationId)) {
+            throw new IllegalStateException(
+                    "City " + id.value() + " is already linked to canonical location " + locationId
+                            + "; relinking would orphan every trip already synchronised under it");
+        }
+        return new City(id, name, state, country, canonicalLocationId);
+    }
+
     private static String requireNonBlank(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");

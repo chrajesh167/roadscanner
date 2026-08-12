@@ -5,13 +5,24 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/feedback';
-import { useSuggestions } from '@/lib/hooks/use-search';
+import { useLocationSuggestions } from '@/lib/hooks/use-search';
 import { cn } from '@/lib/utils/cn';
+import type { SelectedPlace } from '@/lib/api/types';
 
 /**
- * Origin/destination field backed by `GET /api/v1/search/suggestions`.
+ * Origin/destination field backed by `GET /api/v1/locations`.
  *
- * The suggestion list is a combobox: fully keyboard-operable (arrows, enter, escape) and
+ * It carries a {@link SelectedPlace} rather than a bare string, because a name alone cannot reach a
+ * provider: provider search is keyed by canonical location id, and the translation into each
+ * provider's own city vocabulary hangs off that id. A field that forgot the id of the row the
+ * traveller actually clicked would leave the search unable to ask any provider — which is precisely
+ * what it used to do, by consuming a suggestions endpoint that returned nothing but strings.
+ *
+ * Typing freely is still allowed and still searches; it simply yields `id: null`, and the caller
+ * decides what that means. Guessing the id from the typed text is exactly the mistranslation the
+ * platform refuses elsewhere by name.
+ *
+ * The suggestion list remains a combobox: fully keyboard-operable (arrows, enter, escape) and
  * announced via `aria-activedescendant`, because a mouse-only autocomplete is a dead end for
  * anyone using the keyboard or a screen reader.
  */
@@ -24,27 +35,27 @@ export function PlaceInput({
   icon,
 }: {
   id: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: SelectedPlace;
+  onChange: (value: SelectedPlace) => void;
   placeholder?: string;
   invalid?: boolean;
   icon?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState(value);
+  const [query, setQuery] = React.useState(value.name);
   const [highlight, setHighlight] = React.useState(-1);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   // Debounce so a fast typist issues one request, not one per keystroke.
-  const [debounced, setDebounced] = React.useState(value);
+  const [debounced, setDebounced] = React.useState(value.name);
   React.useEffect(() => {
     const timer = setTimeout(() => setDebounced(query), 220);
     return () => clearTimeout(timer);
   }, [query]);
 
-  React.useEffect(() => setQuery(value), [value]);
+  React.useEffect(() => setQuery(value.name), [value.name]);
 
-  const { data: suggestions = [], isFetching } = useSuggestions(debounced);
+  const { data: suggestions = [], isFetching } = useLocationSuggestions(debounced);
   const visible = open && suggestions.length > 0;
 
   React.useEffect(() => {
@@ -55,9 +66,10 @@ export function PlaceInput({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, []);
 
-  function commit(place: string) {
-    onChange(place);
-    setQuery(place);
+  /** Picking a row is the only way an id is ever acquired. */
+  function commit(place: { id: string; displayName: string }) {
+    onChange({ name: place.displayName, id: place.id });
+    setQuery(place.displayName);
     setOpen(false);
     setHighlight(-1);
   }
@@ -97,7 +109,9 @@ export function PlaceInput({
         placeholder={placeholder}
         onChange={(event) => {
           setQuery(event.target.value);
-          onChange(event.target.value);
+          // Editing after a pick drops the id: the text no longer necessarily names the row that
+          // was chosen, and a stale id would search a place the traveller can no longer see.
+          onChange({ name: event.target.value, id: null });
           setOpen(true);
           setHighlight(-1);
         }}
@@ -123,7 +137,7 @@ export function PlaceInput({
             className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 max-h-64 overflow-y-auto rounded-md panel p-1.5 shadow-lg"
           >
             {suggestions.map((place, index) => (
-              <li key={place} id={`${id}-option-${index}`} role="option" aria-selected={index === highlight}>
+              <li key={place.id} id={`${id}-option-${index}`} role="option" aria-selected={index === highlight}>
                 <button
                   type="button"
                   onMouseEnter={() => setHighlight(index)}
@@ -136,7 +150,10 @@ export function PlaceInput({
                   )}
                 >
                   <MapPin className="size-3.5 shrink-0 text-content-muted" />
-                  {place}
+                  <span className="truncate">{place.displayName}</span>
+                  {place.state && (
+                    <span className="ml-auto shrink-0 text-caption text-content-muted">{place.state}</span>
+                  )}
                 </button>
               </li>
             ))}
