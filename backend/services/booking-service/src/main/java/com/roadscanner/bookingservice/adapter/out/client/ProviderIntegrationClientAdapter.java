@@ -123,8 +123,8 @@ class ProviderIntegrationClientAdapter implements ProviderIntegrationClient {
             if (response == null) {
                 throw new UpstreamServiceUnavailableException("provider-integration-service", "empty ConfirmBooking response");
             }
-            return new BookingConfirmationView(response.bookingReference(), response.providerCheckoutReference(),
-                    response.confirmedAt());
+            return new BookingConfirmationView(response.bookingReference(), response.providerOrderReference(),
+                    response.providerCheckoutReference(), response.confirmedAt());
         }, providerType, "confirm booking for block " + providerBlockReference);
     }
 

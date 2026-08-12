@@ -2,6 +2,7 @@ package com.roadscanner.bookingservice.adapter.in.rest.exception;
 
 import com.roadscanner.bookingservice.adapter.in.rest.filter.CorrelationIdFilter;
 import com.roadscanner.bookingservice.domain.exception.BookingNotFoundException;
+import com.roadscanner.bookingservice.domain.exception.ProviderOrderNotReversibleException;
 import com.roadscanner.bookingservice.domain.exception.BookingServiceException;
 import com.roadscanner.bookingservice.domain.exception.PassengerSeatMismatchException;
 import com.roadscanner.bookingservice.domain.exception.SeatHoldExpiredException;
@@ -85,6 +86,20 @@ public class GlobalExceptionHandler {
     public ProblemDetail handlePassengerSeatMismatch(PassengerSeatMismatchException ex, HttpServletRequest request) {
         log.warn("Passenger/seat mismatch on {}: {}", request.getRequestURI(), ex.getMessage());
         return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), VALIDATION_TYPE, request);
+    }
+
+    /**
+     * 409, not 503: the request is well-formed and the provider is fine — this service simply
+     * cannot name the order to reverse, which is a conflict with the state it recorded. A 503 would
+     * invite a retry that can never succeed.
+     */
+    @ExceptionHandler(ProviderOrderNotReversibleException.class)
+    public ProblemDetail handleProviderOrderNotReversible(ProviderOrderNotReversibleException ex,
+                                                          HttpServletRequest request) {
+        log.error("Booking {} cannot be cancelled: no provider order reference recorded", ex.bookingId());
+        return problem(HttpStatus.CONFLICT,
+                "This booking cannot be cancelled automatically — please contact support",
+                VALIDATION_TYPE, request);
     }
 
     @ExceptionHandler(BookingNotFoundException.class)

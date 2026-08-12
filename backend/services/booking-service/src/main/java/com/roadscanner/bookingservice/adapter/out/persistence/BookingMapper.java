@@ -36,6 +36,7 @@ final class BookingMapper {
                 entity.getProviderBlockReference(),
                 entity.getHoldExpiresAt(),
                 entity.getProviderBookingReference(),
+                entity.getProviderOrderReference(),
                 passengers,
                 new Contact(entity.getContactPhone(), entity.getContactEmail(),
                         Contact.CommunicationPreference.parse(entity.getContactCommunicationPreference())),
@@ -63,6 +64,7 @@ final class BookingMapper {
                 booking.providerBlockReference(),
                 booking.holdExpiresAt(),
                 booking.providerBookingReference().orElse(null),
+                booking.providerOrderReference().orElse(null),
                 toEmbeddables(booking.passengers()),
                 booking.contact().phone(),
                 booking.contact().email(),
@@ -87,6 +89,7 @@ final class BookingMapper {
     void applyTo(BookingJpaEntity entity, Booking booking) {
         entity.applyMutableState(
                 booking.providerBookingReference().orElse(null),
+                booking.providerOrderReference().orElse(null),
                 booking.status().name(),
                 booking.cancellationReason().map(Enum::name).orElse(null),
                 booking.supportFlagged(),

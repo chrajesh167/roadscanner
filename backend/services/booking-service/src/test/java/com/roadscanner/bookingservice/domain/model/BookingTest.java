@@ -38,7 +38,7 @@ class BookingTest {
         Booking booking = newBooking();
         Ticket ticket = new Ticket("ticket-1", "PDF", "content".getBytes(), T0.plusSeconds(700));
 
-        boolean applied = booking.confirm("provider-booking-ref-1", ticket, T0.plusSeconds(700));
+        boolean applied = booking.confirm("provider-booking-ref-1", "provider-booking-ref-1-ORD", ticket, T0.plusSeconds(700));
 
         assertThat(applied).isTrue();
         assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
@@ -51,9 +51,9 @@ class BookingTest {
     void confirmIsANoOpWhenNotPendingPayment() {
         Booking booking = newBooking();
         Ticket ticket = new Ticket("ticket-1", "PDF", "content".getBytes(), T0.plusSeconds(700));
-        booking.confirm("provider-booking-ref-1", ticket, T0.plusSeconds(700));
+        booking.confirm("provider-booking-ref-1", "provider-booking-ref-1-ORD", ticket, T0.plusSeconds(700));
 
-        boolean secondApply = booking.confirm("provider-booking-ref-2", ticket, T0.plusSeconds(800));
+        boolean secondApply = booking.confirm("provider-booking-ref-2", "provider-booking-ref-2-ORD", ticket, T0.plusSeconds(800));
 
         assertThat(secondApply).isFalse();
         assertThat(booking.providerBookingReference()).contains("provider-booking-ref-1");
@@ -74,7 +74,7 @@ class BookingTest {
     @Test
     void cancelFromConfirmedSucceeds() {
         Booking booking = newBooking();
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
 
         boolean applied = booking.cancel(CancellationReason.TRAVELER_REQUESTED, T0.plusSeconds(200));
 
@@ -97,7 +97,7 @@ class BookingTest {
     @Test
     void cancelIsANoOpOnceCompleted() {
         Booking booking = newBooking();
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
         booking.complete(T0.plusSeconds(9999));
 
         boolean applied = booking.cancel(CancellationReason.TRAVELER_REQUESTED, T0.plusSeconds(10000));
@@ -113,7 +113,7 @@ class BookingTest {
         boolean appliedTooEarly = booking.complete(T0.plusSeconds(50));
         assertThat(appliedTooEarly).isFalse();
 
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
         boolean applied = booking.complete(T0.plusSeconds(9999));
 
         assertThat(applied).isTrue();
@@ -128,7 +128,7 @@ class BookingTest {
         assertThat(booking.isHoldExpired(T0.plusSeconds(700))).isTrue();
         assertThat(booking.isHoldExpired(T0.plusSeconds(100))).isFalse();
 
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(50));
         assertThat(booking.isHoldExpired(T0.plusSeconds(700))).isFalse();
     }
 

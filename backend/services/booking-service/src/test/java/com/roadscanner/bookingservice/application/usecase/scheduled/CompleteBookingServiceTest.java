@@ -37,7 +37,7 @@ class CompleteBookingServiceTest {
                 departureTime.minusSeconds(1000), List.of(new Passenger("A", "Traveller", LocalDate.of(1994, 3, 17), "F", "L1")),
                 new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         bookingRepository.save(booking);
         return booking;
     }

@@ -93,8 +93,14 @@ public interface ProviderIntegrationClient {
      * @param providerCheckoutReference the pre-order handle, where the provider issues one; the
      *                                  only handle support can use if an order lookup ever fails
      */
-    record BookingConfirmationView(String providerBookingReference, String providerCheckoutReference,
-                                    Instant confirmedAt) {
+    /**
+     * @param providerOrderReference the identifier the provider's cancel route is keyed by. Distinct
+     *                               from {@code providerBookingReference} and not derivable from it —
+     *                               dropping it here is what left every confirmed booking
+     *                               uncancellable.
+     */
+    record BookingConfirmationView(String providerBookingReference, String providerOrderReference,
+                                    String providerCheckoutReference, Instant confirmedAt) {
     }
 
     record CancellationView(String providerOrderReference, BigDecimal refundedAmount, String refundedCurrency,

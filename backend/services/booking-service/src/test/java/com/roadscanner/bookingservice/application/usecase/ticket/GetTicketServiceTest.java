@@ -47,7 +47,7 @@ class GetTicketServiceTest {
         UUID travelerId = UUID.randomUUID();
         Booking booking = newBooking(travelerId);
         Ticket ticket = new Ticket("ticket-1", "PDF", "content".getBytes(), T0.plusSeconds(10));
-        booking.confirm("provider-ref-1", ticket, T0.plusSeconds(10));
+        booking.confirm("provider-ref-1", "provider-ref-1-ORD", ticket, T0.plusSeconds(10));
         bookingRepository.save(booking);
 
         GetTicket.Result result = service.get(

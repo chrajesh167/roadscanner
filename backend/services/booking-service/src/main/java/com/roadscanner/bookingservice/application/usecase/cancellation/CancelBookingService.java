@@ -1,6 +1,7 @@
 package com.roadscanner.bookingservice.application.usecase.cancellation;
 
 import com.roadscanner.bookingservice.domain.exception.BookingNotFoundException;
+import com.roadscanner.bookingservice.domain.exception.ProviderOrderNotReversibleException;
 import com.roadscanner.bookingservice.domain.model.Booking;
 import com.roadscanner.bookingservice.domain.model.BookingStatus;
 import com.roadscanner.bookingservice.domain.model.CancellationReason;
@@ -84,15 +85,25 @@ public class CancelBookingService implements CancelBooking {
     /**
      * Reverses the confirmed order with the provider that issued it.
      *
-     * <p>A booking with no provider reference never reached the provider, so there is nothing to
-     * reverse. Anything else propagates: this used to be documented as a known gap
-     * ("attempts no provider-side reversal"), which meant every traveller cancellation refunded
-     * the customer while leaving a live, paid order at the provider.
+     * <p>Keyed by the <strong>order</strong> reference, which is what the provider's cancel route
+     * accepts. This previously sent the <em>booking</em> reference — a different identifier the
+     * provider issues alongside it — so every explicit cancellation of a confirmed booking was
+     * rejected as an unknown order and surfaced to the traveller as a 503.
+     *
+     * <p>A booking with no provider booking reference never reached the provider, so there is
+     * nothing to reverse and cancellation continues. One that reached the provider but has no
+     * recorded order reference is refused instead: proceeding would refund the traveller while
+     * leaving a live, paid order at the provider, which is the failure this whole step exists to
+     * prevent. Anything the provider itself raises propagates for the same reason.
      */
     private void cancelWithProvider(Booking booking) {
-        booking.providerBookingReference().ifPresent(reference ->
-                providerIntegrationClient.cancelBooking(booking.providerType(), reference,
-                        "cancelled by traveller request"));
+        if (booking.providerBookingReference().isEmpty()) {
+            return;
+        }
+        String orderReference = booking.providerOrderReference()
+                .orElseThrow(() -> new ProviderOrderNotReversibleException(booking.id()));
+        providerIntegrationClient.cancelBooking(booking.providerType(), orderReference,
+                "cancelled by traveller request");
     }
 
     private boolean canCancel(Booking booking, RequesterContext requester) {

@@ -90,7 +90,8 @@ public class HandlePaymentCompletedService implements HandlePaymentCompleted {
         // booking, and the traveller can still be checked in against the provider's order.
         Ticket ticket = fetchTicketIfAvailable(booking, confirmation.providerBookingReference());
 
-        booking.confirm(confirmation.providerBookingReference(), ticket, command.occurredAt());
+        booking.confirm(confirmation.providerBookingReference(), confirmation.providerOrderReference(),
+                ticket, command.occurredAt());
         bookingRepository.save(booking);
         eventPublisher.publishBookingConfirmed(booking, command.occurredAt());
     }

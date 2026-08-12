@@ -53,7 +53,7 @@ class HandleTripCancelledServiceTest {
                 List.of(new Passenger("B", "Traveller", LocalDate.of(1994, 3, 17), "F", "L2")),
                 new Contact("+919876543210", "traveller@example.com", Contact.CommunicationPreference.EMAIL),
                 new Fare(BigDecimal.valueOf(500), Currency.getInstance("INR")), T0);
-        confirmed.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        confirmed.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         confirmed.associatePaymentReference("payment-ref-1");
         bookingRepository.save(confirmed);
 

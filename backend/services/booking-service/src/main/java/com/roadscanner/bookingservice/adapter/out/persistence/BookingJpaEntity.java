@@ -60,6 +60,10 @@ public class BookingJpaEntity {
     @Column(name = "provider_booking_reference")
     private String providerBookingReference;
 
+    /** The identifier the provider's cancel route is keyed by — see V3. */
+    @Column(name = "provider_order_reference")
+    private String providerOrderReference;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "booking_passengers", joinColumns = @JoinColumn(name = "booking_id"))
     private List<PassengerEmbeddable> passengers = new ArrayList<>();
@@ -129,7 +133,8 @@ public class BookingJpaEntity {
 
     BookingJpaEntity(UUID id, UUID travelerId, UUID tripId, Instant tripDepartureTime, String providerType,
                       String providerTripId, String providerBlockReference, Instant holdExpiresAt,
-                      String providerBookingReference, List<PassengerEmbeddable> passengers, String contactPhone,
+                      String providerBookingReference, String providerOrderReference,
+                      List<PassengerEmbeddable> passengers, String contactPhone,
                       String contactEmail, String contactCommunicationPreference, BigDecimal fareAmount,
                       String fareCurrency, String status, String cancellationReason, boolean supportFlagged,
                       String paymentReference, String ticketProviderTicketId, String ticketFormat,
@@ -144,6 +149,7 @@ public class BookingJpaEntity {
         this.providerBlockReference = providerBlockReference;
         this.holdExpiresAt = holdExpiresAt;
         this.providerBookingReference = providerBookingReference;
+        this.providerOrderReference = providerOrderReference;
         this.passengers = new ArrayList<>(passengers);
         this.contactPhone = contactPhone;
         this.contactEmail = contactEmail;
@@ -164,11 +170,13 @@ public class BookingJpaEntity {
         this.completedAt = completedAt;
     }
 
-    void applyMutableState(String providerBookingReference, String status, String cancellationReason,
+    void applyMutableState(String providerBookingReference, String providerOrderReference, String status,
+                           String cancellationReason,
                             boolean supportFlagged, String paymentReference, String ticketProviderTicketId,
                             String ticketFormat, byte[] ticketContent, Instant ticketIssuedAt, Instant confirmedAt,
                             Instant cancelledAt, Instant completedAt) {
         this.providerBookingReference = providerBookingReference;
+        this.providerOrderReference = providerOrderReference;
         this.status = status;
         this.cancellationReason = cancellationReason;
         this.supportFlagged = supportFlagged;
@@ -216,6 +224,10 @@ public class BookingJpaEntity {
 
     public String getProviderBookingReference() {
         return providerBookingReference;
+    }
+
+    String getProviderOrderReference() {
+        return providerOrderReference;
     }
 
     public List<PassengerEmbeddable> getPassengers() {

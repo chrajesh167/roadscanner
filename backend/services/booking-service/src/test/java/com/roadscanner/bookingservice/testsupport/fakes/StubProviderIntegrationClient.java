@@ -20,8 +20,12 @@ public final class StubProviderIntegrationClient implements ProviderIntegrationC
             "reservation-1", "block-ref-1", passengers.stream().map(Passenger::seatNumber).toList(), "BLOCKED",
             java.time.Instant.parse("2026-08-01T00:00:00Z"), java.time.Instant.parse("2026-08-01T00:10:00Z"));
     public Supplier<Boolean> releaseSeatResult = () -> true;
+    // Booking and order references are deliberately different values: they are different
+    // identifiers at every real provider, and a stub that returned one value for both would let a
+    // caller send the wrong one and still pass.
     public Supplier<BookingConfirmationView> confirmBookingResult = () -> new BookingConfirmationView(
-            "provider-booking-ref-1", "checkout-ref-1", java.time.Instant.parse("2026-08-01T00:05:00Z"));
+            "provider-booking-ref-1", "provider-order-ref-1", "checkout-ref-1",
+            java.time.Instant.parse("2026-08-01T00:05:00Z"));
     public Supplier<Optional<TicketView>> downloadTicketResult = () -> Optional.of(new TicketView("ticket-1", "PDF",
             "ticket-content".getBytes(), java.time.Instant.parse("2026-08-01T00:06:00Z")));
     public Supplier<CancellationView> cancelBookingResult = () -> new CancellationView("provider-booking-ref-1",

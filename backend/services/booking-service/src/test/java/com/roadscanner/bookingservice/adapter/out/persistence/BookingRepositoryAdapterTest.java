@@ -69,7 +69,7 @@ class BookingRepositoryAdapterTest {
         adapter.save(booking);
 
         Booking reloaded = adapter.findById(booking.id()).orElseThrow();
-        reloaded.confirm("provider-booking-ref-1", new Ticket("t1", "PDF", "content".getBytes(), T0.plusSeconds(10)),
+        reloaded.confirm("provider-booking-ref-1", "provider-booking-ref-1-ORD", new Ticket("t1", "PDF", "content".getBytes(), T0.plusSeconds(10)),
                 T0.plusSeconds(10));
         adapter.save(reloaded);
 
@@ -98,7 +98,7 @@ class BookingRepositoryAdapterTest {
         TripId tripId = new TripId(UUID.randomUUID());
         Booking pending = newBooking(UUID.randomUUID(), tripId, "block-ref-5", T0.plusSeconds(3600));
         Booking confirmed = newBooking(UUID.randomUUID(), tripId, "block-ref-6", T0.plusSeconds(3600));
-        confirmed.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        confirmed.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         Booking cancelled = newBooking(UUID.randomUUID(), tripId, "block-ref-7", T0.plusSeconds(3600));
         cancelled.cancel(CancellationReason.TRAVELER_REQUESTED, T0.plusSeconds(10));
         adapter.save(pending);
@@ -125,10 +125,10 @@ class BookingRepositoryAdapterTest {
     void findConfirmedWithDepartureBeforeOnlyReturnsConfirmedDepartedTrips() {
         Booking departed = newBooking(UUID.randomUUID(), new TripId(UUID.randomUUID()), "block-ref-9",
                 T0.minusSeconds(3600));
-        departed.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        departed.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         Booking notDeparted = newBooking(UUID.randomUUID(), new TripId(UUID.randomUUID()), "block-ref-10",
                 T0.plusSeconds(3600));
-        notDeparted.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        notDeparted.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         adapter.save(departed);
         adapter.save(notDeparted);
 
@@ -142,7 +142,7 @@ class BookingRepositoryAdapterTest {
         UUID travelerId = UUID.randomUUID();
         TripId tripId = new TripId(UUID.randomUUID());
         Booking booking = newBooking(travelerId, tripId, "block-ref-11", T0.plusSeconds(3600));
-        booking.confirm("ref", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
+        booking.confirm("ref", "ref-ORD", new Ticket("t", "PDF", "c".getBytes(), T0), T0.plusSeconds(10));
         booking.complete(T0.plusSeconds(9999));
         adapter.save(booking);
 

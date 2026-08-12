@@ -26,6 +26,7 @@ public final class Booking {
     private final String providerBlockReference;
     private final Instant holdExpiresAt;
     private String providerBookingReference;
+    private String providerOrderReference;
     private final List<Passenger> passengers;
     private final Contact contact;
     private final Fare fare;
@@ -41,7 +42,8 @@ public final class Booking {
 
     private Booking(BookingId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                      ProviderType providerType, String providerTripId, String providerBlockReference,
-                     Instant holdExpiresAt, String providerBookingReference, List<Passenger> passengers, Contact contact, Fare fare,
+                     Instant holdExpiresAt, String providerBookingReference, String providerOrderReference,
+                     List<Passenger> passengers, Contact contact, Fare fare,
                      BookingStatus status, CancellationReason cancellationReason, boolean supportFlagged,
                      String paymentReference, Ticket ticket, Instant createdAt, Instant confirmedAt,
                      Instant cancelledAt, Instant completedAt) {
@@ -54,6 +56,7 @@ public final class Booking {
         this.providerBlockReference = providerBlockReference;
         this.holdExpiresAt = holdExpiresAt;
         this.providerBookingReference = providerBookingReference;
+        this.providerOrderReference = providerOrderReference;
         this.passengers = List.copyOf(passengers);
         this.contact = contact;
         this.fare = fare;
@@ -89,14 +92,16 @@ public final class Booking {
             throw new IllegalArgumentException("passengers must not be empty");
         }
         return new Booking(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
-                providerBlockReference, holdExpiresAt, null, passengers, contact, fare, BookingStatus.PENDING_PAYMENT, null,
+                providerBlockReference, holdExpiresAt, null, null, passengers, contact, fare,
+                BookingStatus.PENDING_PAYMENT, null,
                 false, null, null, now, null, null, null);
     }
 
     public static Booking reconstitute(BookingId id, UUID travelerId, TripId tripId, Instant tripDepartureTime,
                                         ProviderType providerType, String providerTripId,
                                         String providerBlockReference, Instant holdExpiresAt,
-                                        String providerBookingReference, List<Passenger> passengers,
+                                        String providerBookingReference, String providerOrderReference,
+                                        List<Passenger> passengers,
                                         Contact contact, Fare fare,
                                         BookingStatus status, CancellationReason cancellationReason,
                                         boolean supportFlagged, String paymentReference, Ticket ticket,
@@ -104,7 +109,8 @@ public final class Booking {
                                         Instant completedAt) {
         return new Booking(id, travelerId, tripId, tripDepartureTime, providerType, providerTripId,
                 providerBlockReference, holdExpiresAt,
-                providerBookingReference, passengers, contact, fare, status, cancellationReason, supportFlagged,
+                providerBookingReference, providerOrderReference, passengers, contact, fare, status,
+                cancellationReason, supportFlagged,
                 paymentReference, ticket, createdAt, confirmedAt, cancelledAt, completedAt);
     }
 
@@ -129,13 +135,18 @@ public final class Booking {
      * ticket here meant a successfully paid provider order was cancelled and refunded seconds
      * later because no ticket could be fetched for it. The field was already nullable in the
      * database and already exposed as an {@code Optional} — only this check disagreed. */
-    public boolean confirm(String providerBookingReference, Ticket ticket, Instant now) {
+    public boolean confirm(String providerBookingReference, String providerOrderReference, Ticket ticket,
+                            Instant now) {
         Objects.requireNonNull(providerBookingReference, "providerBookingReference must not be null");
         Objects.requireNonNull(now, "now must not be null");
         if (status != BookingStatus.PENDING_PAYMENT) {
             return false;
         }
         this.providerBookingReference = providerBookingReference;
+        // Captured here because this is the only moment it is known, and it is the identifier the
+        // provider's cancel route is keyed by. Nullable: a provider that issues no separate order
+        // reference is expressible, and pretending otherwise would mean inventing one.
+        this.providerOrderReference = providerOrderReference;
         this.ticket = ticket;
         this.status = BookingStatus.CONFIRMED;
         this.confirmedAt = now;
@@ -222,6 +233,17 @@ public final class Booking {
 
     public Optional<String> providerBookingReference() {
         return Optional.ofNullable(providerBookingReference);
+    }
+
+    /**
+     * The provider's order identifier — what its cancel route is keyed by.
+     *
+     * <p>Distinct from {@link #providerBookingReference()}, and not derivable from it: both are
+     * minted by the provider at confirmation. Absent for bookings that never reached the provider,
+     * and for those confirmed before this was recorded.
+     */
+    public Optional<String> providerOrderReference() {
+        return Optional.ofNullable(providerOrderReference);
     }
 
     /** Where the ticket is sent. Required by the provider at checkout, so never absent. */
