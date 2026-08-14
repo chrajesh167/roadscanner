@@ -31,13 +31,30 @@
 #   CONTACT_EMAIL   booking contact address. Defaults to NOTIFICATION_EMAIL_USERNAME so the SMTP
 #                   path is exercised against a real mailbox. No credential is ever read or printed.
 #   DEMO_DATE       override the travel date (YYYY-MM-DD). Defaults to today in Asia/Kolkata.
+#   DEMO_BASE_URL   origin serving the customer-facing APIs. Defaults to the production ingress.
+#   NOTIFICATION_DB_CONTAINER
+#                   container running notification-service's Postgres, for reading notification_log.
+#                   Auto-detected when unset.
 set -euo pipefail
 
-AUTH=http://localhost:8081
-SEARCH=http://localhost:8082
-INVENTORY=http://localhost:8084
-BOOKING=http://localhost:8085
-PAYMENT=http://localhost:8086
+# Every customer-facing API is reached through ONE origin, because that is how the platform is
+# actually served: nginx path-routes /api/v1/auth, /api/v1/search, /api/v1/inventory,
+# /api/v1/bookings and /api/v1/payments to their services (docker/nginx/nginx.conf). The browser
+# never sees a service port, so neither does this script.
+#
+# The per-service overrides below exist only for a stack run without the ingress — e.g. services
+# started natively by ./scripts/start-all.sh, where each listens on its own port:
+#
+#   AUTH_BASE_URL=http://localhost:8081 SEARCH_BASE_URL=http://localhost:8082 \
+#   INVENTORY_BASE_URL=http://localhost:8084 BOOKING_BASE_URL=http://localhost:8085 \
+#   PAYMENT_BASE_URL=http://localhost:8086 ./scripts/demo-flow.sh
+DEMO_BASE_URL=${DEMO_BASE_URL:-http://localhost:80}
+
+AUTH=${AUTH_BASE_URL:-$DEMO_BASE_URL}
+SEARCH=${SEARCH_BASE_URL:-$DEMO_BASE_URL}
+INVENTORY=${INVENTORY_BASE_URL:-$DEMO_BASE_URL}
+BOOKING=${BOOKING_BASE_URL:-$DEMO_BASE_URL}
+PAYMENT=${PAYMENT_BASE_URL:-$DEMO_BASE_URL}
 
 ORIGIN=${ORIGIN:-Hyderabad}
 DESTINATION=${DESTINATION:-Bengaluru}
@@ -171,8 +188,23 @@ cancel_booking() {
     curl -sS -X POST "$BOOKING/api/v1/bookings/$bookingId/cancel" -H "Authorization: Bearer $token"
 }
 
+# notification_log is read straight from Postgres because no API exposes it — it is the service's
+# own audit record, not customer-facing surface. The container differs per stack (compose project
+# prefix vs the local infrastructure file), so it is resolved rather than assumed.
+notification_db_container() {
+    if [ -n "${NOTIFICATION_DB_CONTAINER:-}" ]; then
+        printf '%s' "$NOTIFICATION_DB_CONTAINER"
+        return
+    fi
+    for candidate in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'notification.*postgres|postgres.*notification' || true); do
+        printf '%s' "$candidate"
+        return
+    done
+    die "cannot find the notification Postgres container — set NOTIFICATION_DB_CONTAINER"
+}
+
 notification_rows() {
-    docker exec roadscanner-notification-postgres psql -U notificationservice -d notificationservice -t -A -F'|' \
+    docker exec "$(notification_db_container)" psql -U notificationservice -d notificationservice -t -A -F'|' \
         -c "select event_type, channel, status, coalesce(failure_reason,'') from notification_log where booking_id='$1' order by created_at;"
 }
 

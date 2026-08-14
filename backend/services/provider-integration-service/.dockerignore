@@ -1,0 +1,15 @@
+# Keeps the build context to what the Dockerfile actually needs: .mvn/, mvnw, pom.xml and src/.
+# The image compiles from source inside the build stage, so anything Maven produced on the host is
+# dead weight — target/ alone is tens of megabytes per service and is never read by the build.
+
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+logs/
+.env
+.env.*
+.DS_Store
+README.md

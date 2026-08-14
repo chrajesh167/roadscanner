@@ -1,0 +1,426 @@
+# Production-style stack: every RoadScanner component in containers, behind a single ingress.
+#
+# This file is deliberately separate from docker-compose.yml and never replaces it. That file is
+# infrastructure-only and publishes 5432-5438/6379/9093 so services running natively via
+# ./scripts/start-all.sh can reach them — the fast local iteration loop. This one publishes exactly
+# one port (nginx :80) and keeps everything else on an internal network, which is the shape that
+# deploys to a single EC2 instance.
+#
+# The two can coexist: `name:` below puts this stack in its own Compose project, so container names
+# and volumes never collide with the local ones.
+#
+#   docker compose -f docker-compose.prod.yml --env-file <your.env> up -d --build
+#
+# Required environment comes from --env-file (or the shell). Nothing here has a credential default:
+# `${VAR:?...}` fails the command with a named error rather than starting a half-configured stack.
+# See the deployment report for the full variable list; never commit the file that holds them.
+
+name: roadscanner-prod
+
+# ---------------------------------------------------------------- shared fragments
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-postgres: &postgres
+  image: postgres:16-alpine
+  restart: unless-stopped
+  logging: *logging
+  # No `ports:` anywhere in this file except nginx. A published database port on an internet-facing
+  # instance is the single most common way these stacks get compromised.
+  healthcheck:
+    interval: 5s
+    timeout: 5s
+    retries: 10
+
+x-service: &service
+  restart: unless-stopped
+  logging: *logging
+  environment: &service-env
+    SPRING_PROFILES_ACTIVE: dev
+    # Bounded heap so seven JVMs, a broker and seven databases coexist on one modest instance.
+    # Without this each JVM sizes its heap from total host memory and they collectively overcommit.
+    JAVA_TOOL_OPTIONS: -Xms128m -Xmx384m
+
+services:
+
+  # ---------------------------------------------------------------- data stores
+  #
+  # One Postgres container per service, matching docs/architecture/database-ownership.md: every
+  # service owns exactly one database and no service reads another's. Consolidating them into a
+  # shared instance would save memory and quietly break that boundary, so it is not done here.
+
+  postgres-auth:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: authservice
+      POSTGRES_USER: authservice
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authservice -d authservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-search:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: searchservice
+      POSTGRES_USER: searchservice
+      POSTGRES_PASSWORD: ${SEARCH_DB_PASSWORD:?SEARCH_DB_PASSWORD is required}
+    volumes:
+      - postgres-search-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U searchservice -d searchservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-provider-integration:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: providerintegrationservice
+      POSTGRES_USER: providerintegrationservice
+      POSTGRES_PASSWORD: ${PROVIDER_DB_PASSWORD:?PROVIDER_DB_PASSWORD is required}
+    volumes:
+      - postgres-provider-integration-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U providerintegrationservice -d providerintegrationservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-inventory:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: inventoryservice
+      POSTGRES_USER: inventoryservice
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventoryservice -d inventoryservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-booking:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: bookingservice
+      POSTGRES_USER: bookingservice
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD:?BOOKING_DB_PASSWORD is required}
+    volumes:
+      - postgres-booking-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookingservice -d bookingservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-payment:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: paymentservice
+      POSTGRES_USER: paymentservice
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+    volumes:
+      - postgres-payment-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paymentservice -d paymentservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-notification:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: notificationservice
+      POSTGRES_USER: notificationservice
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is required}
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notificationservice -d notificationservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cache only, and deliberately without a volume — matching how the platform already treats it
+  # (docker-compose.yml has no Redis volume either). Note the one consequence worth knowing: the
+  # JWT revocation set in auth-service lives here, so a Redis restart un-revokes tokens that have
+  # not yet expired. That is the existing architecture's trade-off, not one introduced here.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Single-node KRaft broker. INTERNAL only: every client is a container on this network, so there
+  # is no EXTERNAL listener and no published port — the reason localhost:9093 exists in
+  # docker-compose.yml is to serve host-run services, which do not exist in this stack.
+  # The advertised address is the compose service name, resolvable by every other container.
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "0n0Osg_UReaba_yyF1F_Xg"
+    volumes:
+      # Named, unlike the local file's anonymous volume: event history and consumer offsets should
+      # survive `docker compose down` on a deployed instance.
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  # ---------------------------------------------------------------- backend services
+  #
+  # Built from each service's own Dockerfile rather than pulled by tag: there is no registry yet,
+  # so building here is what makes the stack reproducible from a clean checkout. Each image already
+  # carries its own HEALTHCHECK against /actuator/health/liveness, which is what depends_on reads.
+
+  auth-service:
+    <<: *service
+    build:
+      context: ./backend/services/auth-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-auth:5432/authservice
+      DB_USERNAME: authservice
+      DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required}
+      REDIS_HOST: redis
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      JWT_PRIVATE_KEY_PEM: ${JWT_PRIVATE_KEY_PEM:?JWT_PRIVATE_KEY_PEM is required}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+    depends_on:
+      postgres-auth: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  search-service:
+    <<: *service
+    build:
+      context: ./backend/services/search-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-search:5432/searchservice
+      DB_USERNAME: searchservice
+      DB_PASSWORD: ${SEARCH_DB_PASSWORD:?SEARCH_DB_PASSWORD is required}
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+      INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
+      PROVIDER_INTEGRATION_SERVICE_BASE_URL: http://provider-integration-service:8083
+      GOOGLE_PLACES_ENABLED: ${GOOGLE_PLACES_ENABLED:-false}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+    depends_on:
+      postgres-search: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  provider-integration-service:
+    <<: *service
+    build:
+      context: ./backend/services/provider-integration-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-provider-integration:5432/providerintegrationservice
+      DB_USERNAME: providerintegrationservice
+      DB_PASSWORD: ${PROVIDER_DB_PASSWORD:?PROVIDER_DB_PASSWORD is required}
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+      PROVIDER_CREDENTIAL_ENCRYPTION_KEY: ${PROVIDER_CREDENTIAL_ENCRYPTION_KEY:?PROVIDER_CREDENTIAL_ENCRYPTION_KEY is required}
+      FLIXBUS_BASE_URL: ${FLIXBUS_BASE_URL:?FLIXBUS_BASE_URL is required}
+    depends_on:
+      postgres-provider-integration: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  inventory-service:
+    <<: *service
+    build:
+      context: ./backend/services/inventory-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-inventory:5432/inventoryservice
+      DB_USERNAME: inventoryservice
+      DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      PROVIDER_INTEGRATION_SERVICE_BASE_URL: http://provider-integration-service:8083
+      SEARCH_SERVICE_BASE_URL: http://search-service:8082
+    depends_on:
+      postgres-inventory: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  booking-service:
+    <<: *service
+    build:
+      context: ./backend/services/booking-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-booking:5432/bookingservice
+      DB_USERNAME: bookingservice
+      DB_PASSWORD: ${BOOKING_DB_PASSWORD:?BOOKING_DB_PASSWORD is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      AUTH_SERVICE_JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+      INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
+      PROVIDER_INTEGRATION_SERVICE_BASE_URL: http://provider-integration-service:8083
+    depends_on:
+      postgres-booking: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  payment-service:
+    <<: *service
+    build:
+      context: ./backend/services/payment-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-payment:5432/paymentservice
+      DB_USERNAME: paymentservice
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      AUTH_SERVICE_JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+      PAYMENT_DEFAULT_GATEWAY: ${PAYMENT_DEFAULT_GATEWAY:-RAZORPAY}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?RAZORPAY_WEBHOOK_SECRET is required}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET is required}
+      ADYEN_WEBHOOK_SECRET: ${ADYEN_WEBHOOK_SECRET:?ADYEN_WEBHOOK_SECRET is required}
+    depends_on:
+      postgres-payment: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  # SMTP is optional by design: with no host configured the service still starts and still consumes
+  # booking-events, recording email as FAILED in notification_log rather than silently faking it
+  # (config.NotificationChannelConfig). So these pass through without `:?` — an unset mailbox must
+  # not stop the stack. Values come from the environment and are never written into this file.
+  notification-service:
+    <<: *service
+    build:
+      context: ./backend/services/notification-service
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres-notification:5432/notificationservice
+      DB_USERNAME: notificationservice
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      NOTIFICATION_EMAIL_HOST: ${NOTIFICATION_EMAIL_HOST:-}
+      NOTIFICATION_EMAIL_PORT: ${NOTIFICATION_EMAIL_PORT:-587}
+      NOTIFICATION_EMAIL_USERNAME: ${NOTIFICATION_EMAIL_USERNAME:-}
+      NOTIFICATION_EMAIL_PASSWORD: ${NOTIFICATION_EMAIL_PASSWORD:-}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-RoadScanner <no-reply@roadscanner.local>}
+    depends_on:
+      postgres-notification: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  # ---------------------------------------------------------------- frontends
+  #
+  # NEXT_PUBLIC_* is inlined into the client bundle at build time, so the public origin is a build
+  # arg, not a runtime variable — changing it requires a rebuild, not a restart. Every value is the
+  # SAME origin because nginx path-routes to all six services; the browser never learns a service
+  # port. PUBLIC_ORIGIN defaults to http://localhost, which is what this stack actually serves on;
+  # supply the real origin when building for a deployed environment.
+
+  customer-web:
+    restart: unless-stopped
+    logging: *logging
+    build:
+      context: ./frontend/apps/customer-web
+      args:
+        NEXT_PUBLIC_AUTH_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_SEARCH_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_INVENTORY_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_BOOKING_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_PAYMENT_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+
+  # Serves itself under /admin via basePath in next.config.ts — nginx passes the prefix through
+  # untouched, so Next also owns /admin/_next/* and never collides with customer-web's assets.
+  admin-console:
+    restart: unless-stopped
+    logging: *logging
+    build:
+      context: ./frontend/apps/admin-console
+      args:
+        NEXT_PUBLIC_AUTH_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_SEARCH_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        NEXT_PUBLIC_PROVIDER_INTEGRATION_API_URL: ${PUBLIC_ORIGIN:-http://localhost}
+
+  # ---------------------------------------------------------------- ingress
+  #
+  # The only service with a `ports:` entry in this file. Routing lives in docker/nginx/nginx.conf
+  # and is not duplicated here.
+  nginx:
+    restart: unless-stopped
+    logging: *logging
+    build:
+      context: ./docker/nginx
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      customer-web: { condition: service_healthy }
+      admin-console: { condition: service_healthy }
+
+  # ---------------------------------------------------------------- one-shot bootstrap
+  #
+  # A freshly deployed environment has cities and routes (Flyway) but no canonical-location link,
+  # which cannot be seeded because canonical ids are minted per environment. Without it every route
+  # is skipped by catalog sync and the catalog stays empty — see the script's header.
+  #
+  # Behind a profile so `up` never runs it; behind the network because the endpoint it calls is
+  # /internal/**, which nginx deliberately does not route:
+  #
+  #   docker compose -f docker-compose.prod.yml --env-file <env> --profile bootstrap run --rm bootstrap
+  #
+  # Idempotent — safe to re-run after any deploy.
+  bootstrap:
+    image: alpine:3.20
+    profiles: ["bootstrap"]
+    restart: "no"
+    logging: *logging
+    environment:
+      INVENTORY_URL: http://inventory-service:8084
+      SEARCH_URL: http://search-service:8082
+      BOOTSTRAP_CITIES: ${BOOTSTRAP_CITIES:-Hyderabad Bengaluru}
+      SYNC_TIMEOUT: ${BOOTSTRAP_SYNC_TIMEOUT:-720}
+    volumes:
+      - ./scripts/bootstrap-canonical-locations.sh:/bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache curl jq >/dev/null && exec sh /bootstrap.sh"]
+    depends_on:
+      inventory-service: { condition: service_healthy }
+      search-service: { condition: service_healthy }
+
+volumes:
+  postgres-auth-data:
+  postgres-search-data:
+  postgres-provider-integration-data:
+  postgres-inventory-data:
+  postgres-booking-data:
+  postgres-payment-data:
+  postgres-notification-data:
+  kafka-data:

@@ -21,6 +21,12 @@ USER bookingservice:roadscanner
 WORKDIR /app
 COPY --from=build --chown=bookingservice:roadscanner /app/target/app.jar app.jar
 
+# application.yml declares no datasource or broker, so a container started without a profile
+# fails at startup rather than connecting somewhere unintended. `dev` is the deployed profile
+# (application-dev.yml), which reads every environment-specific value from the environment.
+# Override at run time (-e SPRING_PROFILES_ACTIVE=...) for any other environment.
+ENV SPRING_PROFILES_ACTIVE=dev
+
 EXPOSE 8085
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \

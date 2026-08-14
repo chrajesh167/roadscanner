@@ -1,0 +1,6 @@
+# The image needs nginx.conf and nothing else.
+.git/
+.gitignore
+*.log
+.DS_Store
+README.md

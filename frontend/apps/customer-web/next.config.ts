@@ -12,6 +12,10 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Emits .next/standalone with a self-contained server.js and only the node_modules actually
+  // reachable from the build. The container image copies that instead of the full dependency
+  // tree — the difference is hundreds of megabytes, and nothing about local `next dev` changes.
+  output: 'standalone',
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
   },

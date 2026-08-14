@@ -1,0 +1,18 @@
+# The image installs from package-lock.json and builds inside the container, so a host node_modules
+# or .next only bloats the context and risks a platform-mismatched binary (sharp, esbuild) leaking
+# into the build.
+
+node_modules/
+.next/
+out/
+coverage/
+.git/
+.gitignore
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Dockerfile
+.dockerignore
+tsconfig.tsbuildinfo

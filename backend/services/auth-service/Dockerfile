@@ -26,6 +26,12 @@ USER authservice:roadscanner
 WORKDIR /app
 COPY --from=build --chown=authservice:roadscanner /app/target/app.jar app.jar
 
+# application.yml declares no datasource or broker, so a container started without a profile
+# fails at startup rather than connecting somewhere unintended. `dev` is the deployed profile
+# (application-dev.yml), which reads every environment-specific value from the environment.
+# Override at run time (-e SPRING_PROFILES_ACTIVE=...) for any other environment.
+ENV SPRING_PROFILES_ACTIVE=dev
+
 EXPOSE 8081
 
 # Actuator health, not a raw port check — verifies the app is actually serving, not just bound.
