@@ -43,6 +43,10 @@ management:
   endpoint:
     health:
       show-details: never
+      # Exposes /actuator/health/liveness and /actuator/health/readiness, which the container's
+      # HEALTHCHECK and any orchestrator probe read. Matches every other service here.
+      probes:
+        enabled: true
   health:
     # This service's readiness does not depend on a mail server, and must not.
     #

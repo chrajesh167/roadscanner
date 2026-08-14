@@ -49,8 +49,9 @@ export TZ=Asia/Kolkata
 DEMO_DATE=${DEMO_DATE:-$(date +%F)}
 
 # Local docker-compose stub gateway secret from application-local.yml. Not a credential: it signs
-# webhooks for the in-process stub gateway and has no meaning outside this machine.
-RAZORPAY_SECRET=local-razorpay-secret
+# webhooks for the in-process stub gateway and has no meaning outside this machine. Overridable via
+# RAZORPAY_WEBHOOK_SECRET so no environment is forced to use the checked-in local value.
+RAZORPAY_SECRET="${RAZORPAY_WEBHOOK_SECRET:-local-razorpay-secret}"
 
 # Scratch output (last search response, last registration) for debugging a failed run. Kept out of
 # the working tree deliberately — this script lives in the repository now, and writing response
@@ -124,7 +125,7 @@ register() {
     local ident body
     ident="smtpverify$(date +%s)@roadscanner.test"
     body=$(curl -sS -X POST "$AUTH/api/v1/auth/register" -H 'Content-Type: application/json' \
-        -d "{\"identifier\":\"$ident\",\"password\":\"Str0ng!Passw0rd\",\"deviceLabel\":\"smtp-verify\"}")
+        -d "{\"identifier\":\"$ident\",\"password\":\"${DEMO_TRAVELER_PASSWORD:-Str0ng!Passw0rd}\",\"deviceLabel\":\"smtp-verify\"}")
     printf '%s' "$body" > "$STATE_DIR/register.json"
     printf '%s' "$body"
 }

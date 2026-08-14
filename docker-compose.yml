@@ -154,20 +154,45 @@ services:
   # topics search-service consumes (docs/services/search-service/events-consumed.md). CLUSTER_ID
   # is a random base64-encoded UUID (16 bytes) generated once for this compose file; it has no
   # meaning beyond identifying this one local cluster, and any valid UUID works equally well.
+  #
+  # Two client listeners, INTERNAL and EXTERNAL, because Kafka does not just accept a connection —
+  # it hands the client an address to reconnect to, and that address has to be reachable from
+  # wherever the client is running:
+  #
+  #   INTERNAL  advertised as kafka:9092     — clients on this compose network, i.e. a RoadScanner
+  #             service running in a container. Resolved by Docker DNS; meaningless on the host.
+  #   EXTERNAL  advertised as localhost:9093 — clients on the developer's machine: a service run
+  #             natively via ./mvnw spring-boot:run, the kafka CLI tools, an IDE.
+  #
+  # One listener cannot serve both. Advertising localhost:9092 (the previous configuration) sends
+  # a containerised client back to itself and fails; advertising kafka:9092 is unresolvable from
+  # the host. This is why the split exists, not a preference.
+  #
+  # EXTERNAL binds 9094 *inside* the container and is published as 9093 on the host, because 9093
+  # inside the container is already the KRaft CONTROLLER listener. An advertised port may differ
+  # from the bound port — what has to be true is that the advertised address works from the
+  # client's own network namespace, and localhost:9093 does. The CONTROLLER listener and its
+  # quorum voter are deliberately unchanged and are never published to the host.
+  #
+  # INTER_BROKER_LISTENER_NAME is INTERNAL: with a single broker there is no inter-broker traffic,
+  # but the setting must still name a real non-controller listener.
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: roadscanner-kafka
     ports:
-      - "9092:9092"
+      # Host 9093 -> container 9094 (EXTERNAL). The INTERNAL listener is deliberately NOT
+      # published: a host client reaching it would be told to reconnect to kafka:9092, which does
+      # not resolve outside the compose network.
+      - "9093:9094"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1

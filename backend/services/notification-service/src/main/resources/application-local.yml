@@ -7,7 +7,9 @@ spring:
     password: notificationservice
 
   kafka:
-    bootstrap-servers: localhost:9092
+    # Kafka's EXTERNAL listener. 9092 is the INTERNAL one, advertised as kafka:9092 and
+    # reachable only from inside the compose network (see docker-compose.yml).
+    bootstrap-servers: localhost:9093
 
   # SMTP, entirely from the environment.
   #

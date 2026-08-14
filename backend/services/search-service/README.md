@@ -44,7 +44,8 @@ docker compose up -d
 ```
 
 The app starts on `:8082` with the `local` profile (`localhost` Postgres on `5433`, Redis on
-`6379`, Kafka on `9092` — matching the ports `docker-compose.yml` exposes).
+`6379`, Kafka on `9093` — matching the ports `docker-compose.yml` exposes; `9093` is Kafka's
+EXTERNAL listener, the one advertised to clients running outside the compose network).
 
 Useful local endpoints once running:
 - `http://localhost:8082/actuator/health`

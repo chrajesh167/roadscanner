@@ -1,0 +1,58 @@
+# Deployed dev environment profile. Every environment-specific value comes from an env var with
+# no hardcoded fallback for secrets — a missing env var should fail startup loudly, not silently
+# default to something insecure. Populated by infrastructure/kubernetes/overlays/dev at deploy
+# time (see docs/architecture/high-level-design.md §10).
+#
+# Nothing here names a host. DB_URL and KAFKA_BOOTSTRAP_SERVERS carry whatever the runtime hands
+# them — service names on a Docker Compose network (jdbc:postgresql://postgres-notification:5432/
+# notificationservice, kafka:9092), or an RDS endpoint and a managed broker elsewhere. Note that
+# the container port is 5432 even where the compose file publishes 5438 on the host: the offset
+# exists only to keep seven local Postgres containers from colliding.
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+  # SMTP, entirely from the environment — no credential has a default here and none may ever be
+  # committed. The empty fallbacks on host/username/password are deliberate and match this
+  # service's documented contract (config.NotificationChannelConfig): with no SMTP host the
+  # service still starts and still consumes booking-events, and email notifications are recorded
+  # FAILED in notification_log with a reason rather than silently faked. Failing startup instead
+  # would take down a consumer that is otherwise working, and would make a mail-provider outage
+  # look like an outage here.
+  #
+  # The recipient is never configured — it comes from the booking's contact details.
+  mail:
+    host: ${NOTIFICATION_EMAIL_HOST:}
+    port: ${NOTIFICATION_EMAIL_PORT:587}
+    username: ${NOTIFICATION_EMAIL_USERNAME:}
+    password: ${NOTIFICATION_EMAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # Bounded so a wedged mail server cannot hold a consumer thread indefinitely.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+roadscanner:
+  notification:
+    email:
+      host: ${NOTIFICATION_EMAIL_HOST:}
+      from: ${NOTIFICATION_EMAIL_FROM:RoadScanner <no-reply@roadscanner.local>}
+
+logging:
+  level:
+    com.roadscanner.notificationservice: INFO
