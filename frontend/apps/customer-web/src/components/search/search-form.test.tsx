@@ -17,6 +17,15 @@ import { searchEndpoints } from '@/lib/api/endpoints/search';
 const HYDERABAD_ID = '11a059ad-77fc-4b40-b8de-37f20ddb4fec';
 const BENGALURU_ID = 'ae8a7ec6-f394-45b6-9aa1-ace2e5f079bb';
 
+/**
+ * A date the form will accept, computed per run rather than written down.
+ *
+ * SearchForm sets `min={today}` on the date input, so a literal date silently becomes invalid the
+ * day after it is written: the browser blocks submit, the router is never called, and the failure
+ * surfaces as "expected spy to be called" rather than as the expired fixture it actually is.
+ */
+const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 const push = vi.fn();
 
 vi.mock('next/navigation', () => ({
@@ -150,7 +159,7 @@ describe('SearchForm — canonical place selection', () => {
           defaultValues={{
             origin: { name: 'Hyderabad', id: HYDERABAD_ID },
             destination: { name: 'Bengaluru', id: BENGALURU_ID },
-            date: '2026-08-13',
+            date: TOMORROW,
           }}
         />
       </QueryClientProvider>,
